@@ -41,6 +41,7 @@ class LatinpipeModel(Model):
             )
 
     def predict(self, test_path: Path, out_path: Path) -> None:
+        print(f"[latinpipe] using checkpoint {self.weights.parent.name}")
         env = {**os.environ, "KERAS_BACKEND": "torch"}
         with tempfile.TemporaryDirectory() as td:
             exp = Path(td)

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ..core import Model
 from .latinpipe import LatinpipeModel
-from .udpipe_baseline import UdpipeBaselineModel
+from .udpipe import UdpipeModel
 
 
 def _make_registry() -> dict[str, Model]:
@@ -15,7 +15,7 @@ def _make_registry() -> dict[str, Model]:
     # not exist yet. We keep the registry as factories so imports stay cheap
     # and errors only fire when the user actually runs that model.
     return {
-        "udpipe_baseline": UdpipeBaselineModel(),
+        "udpipe": UdpipeModel(),
         "latinpipe": LatinpipeModel(),
     }
 
