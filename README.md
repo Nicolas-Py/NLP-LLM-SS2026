@@ -2,7 +2,7 @@
 
 A small bench for evaluating dependency parsers on the EvaLatin 2024 test data, with the goal of beating the published winners.
 
-Comes with two reference models (UDPipe 2 baseline, ÚFAL LatinPipe) and a template stub. Add a new model = write a 30-line Python file.
+Comes with two reference models (UDPipe 2, ÚFAL LatinPipe) and a template stub. Add a new model = write a 30-line Python file.
 
 ## Setup (one time)
 
@@ -28,7 +28,7 @@ Dependencies live in `pyproject.toml` — there's no `requirements.txt` (it woul
 
 ## Running the existing models
 
-The two reference models (`udpipe_baseline`, `latinpipe`) come pre-registered. Pick whichever interface you prefer:
+The two reference models (`udpipe`, `latinpipe`) come pre-registered. Pick whichever interface you prefer:
 
 ### PyCharm (commands in the built-in Terminal)
 
@@ -50,7 +50,7 @@ source .venv/bin/activate
 # Smoke-test both reference models
 python -c "
 from latinbench import Bench, MODELS
-print(Bench().compare([MODELS['udpipe_baseline'], MODELS['latinpipe']]).to_string(index=False))
+print(Bench().compare([MODELS['udpipe'], MODELS['latinpipe']]).to_string(index=False))
 "
 ```
 
@@ -74,7 +74,7 @@ Open the `NLP-LLM-SS2026/` folder, pick the kernel `<repo>/.venv/bin/python` in 
 ```bash
 .venv/bin/python -c "
 from latinbench import Bench, MODELS
-print(Bench().compare([MODELS['udpipe_baseline'], MODELS['latinpipe']]).to_string(index=False))
+print(Bench().compare([MODELS['udpipe'], MODELS['latinpipe']]).to_string(index=False))
 "
 ```
 
@@ -93,7 +93,7 @@ rm -rf predictions/latinpipe
 .venv/bin/python -c "from latinbench import Bench, MODELS; Bench().run(MODELS['latinpipe'], force=True)"
 ```
 
-LatinPipe inference takes ~1–2 min per split on M1 CPU; UDPipe baseline takes ~5–10 sec (REST API).
+LatinPipe inference takes ~1–2 min per split on M1 CPU; UDPipe takes ~5–10 sec (REST API).
 
 ## Common gotchas
 
@@ -133,13 +133,26 @@ See [docs/00_task_explained.md](docs/00_task_explained.md) for a plain-English w
 
 ## Reference scores
 
-Run on the LINDAT REST API (UDPipe 2 + Latin-Perseus, 2026 model) and the released LatinPipe single-model checkpoint:
+Run on the LINDAT REST API (UDPipe 2, model `latin-perseus-ud-2.17-251125`) and the released LatinPipe single-model checkpoint (`latinpipe-evalatin24-240520`). Both are pinned in code so these numbers stay reproducible.
 
 | split | system | LAS | CLAS |
 |---|---|---|---|
-| poetry | UDPipe baseline | 61.19 | 59.90 |
+| poetry | UDPipe | 61.19 | 59.90 |
 | poetry | LatinPipe (1× ckpt) | **72.27** | **71.28** |
-| prose | UDPipe baseline | 62.43 | 57.46 |
+| prose | UDPipe | 62.43 | 57.46 |
 | prose | LatinPipe (1× ckpt) | **75.06** | **70.90** |
 
 The published LatinPipe paper used a 7-model ensemble — that's the bar to beat (~78 LAS poetry, ~83 LAS prose).
+
+### Trying a different UDPipe version
+
+```python
+from latinbench import Bench
+from latinbench.models.udpipe import UdpipeModel, list_perseus_models
+
+print(list_perseus_models())                              # all available LINDAT ids
+Bench().run(UdpipeModel('latin-perseus-ud-2.6-200830'))   # try an older one
+Bench().run(UdpipeModel(model_id='latest'))               # auto-pick newest
+```
+
+Each id gets its own `predictions/<id>/` cache dir, so swapping versions doesn't clobber prior results.
