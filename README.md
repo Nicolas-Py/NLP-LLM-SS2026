@@ -4,24 +4,102 @@ A small bench for evaluating dependency parsers on the EvaLatin 2024 test data, 
 
 Comes with two reference models (UDPipe 2 baseline, ÚFAL LatinPipe) and a template stub. Add a new model = write a 30-line Python file.
 
-## Quick start
+## Setup (one time)
 
 ```bash
+git clone https://github.com/Nicolas-Py/NLP-LLM-SS2026
+cd NLP-LLM-SS2026
+
+# Main env (notebook kernel + Python API)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
-# LatinPipe runs in its own venv (Keras + PyTorch backend);
-# we reuse the same requirements but in a separate interpreter.
+# Subprocess env for LatinPipe (Keras + PyTorch backend)
 python3 -m venv third_party/latinpipe/.venv
 third_party/latinpipe/.venv/bin/pip install -e .
 
-jupyter lab    # or open notebooks/ in VS Code / Cursor
+# Download the LatinPipe checkpoint (≈700 MB) from
+# https://hdl.handle.net/11234/1-5671 and extract its contents
+# (model.weights.h5, mappings.pkl, la_evalatin24.tokenizer, options.json)
+# into checkpoints/latinpipe-evalatin24-240520/
 ```
 
-Then run, in order:
+Dependencies live in `pyproject.toml` — there's no `requirements.txt` (it would just duplicate). `pip install -e .` is the modern equivalent.
 
-1. **`notebooks/01_explore_data.ipynb`** — see what's in the test data, distributions, an example tree.
-2. **`notebooks/02_compare_models.ipynb`** — runs all registered models, scores them, plots a comparison.
+## Running the existing models
+
+The two reference models (`udpipe_baseline`, `latinpipe`) come pre-registered. Pick whichever interface you prefer:
+
+### PyCharm (commands in the built-in Terminal)
+
+Open PyCharm's Terminal tab (**View → Tool Windows → Terminal**, or `⌥F12`) and paste:
+
+```bash
+# One-time setup (skip if already done)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python3 -m venv third_party/latinpipe/.venv
+third_party/latinpipe/.venv/bin/pip install -e .
+# Then drop the LatinPipe checkpoint files into
+# checkpoints/latinpipe-evalatin24-240520/
+
+# Every PyCharm session — activate the venv first
+source .venv/bin/activate
+
+# Smoke-test both reference models
+python -c "
+from latinbench import Bench, MODELS
+print(Bench().compare([MODELS['udpipe_baseline'], MODELS['latinpipe']]).to_string(index=False))
+"
+```
+
+To make PyCharm itself (its notebook runner, autocomplete, "Run" buttons) use this venv, point its project interpreter at `<repo>/.venv/bin/python` once.
+
+### Jupyter Lab / Notebook
+
+```bash
+source .venv/bin/activate
+jupyter lab    # or jupyter notebook
+```
+
+Open `notebooks/02_compare_models.ipynb` → Run All. Same flow as PyCharm; just a browser instead of the IDE.
+
+### VS Code / Cursor
+
+Open the `NLP-LLM-SS2026/` folder, pick the kernel `<repo>/.venv/bin/python` in the top-right of the notebook, then Run All.
+
+### One-liner (no notebook)
+
+```bash
+.venv/bin/python -c "
+from latinbench import Bench, MODELS
+print(Bench().compare([MODELS['udpipe_baseline'], MODELS['latinpipe']]).to_string(index=False))
+"
+```
+
+## Forcing a fresh run
+
+Results cache at `predictions/<model_name>/scores.json`. To re-run:
+
+```bash
+# Re-run everything from scratch
+rm -rf predictions/
+
+# Re-run just one model
+rm -rf predictions/latinpipe
+
+# Or pass force=True from Python:
+.venv/bin/python -c "from latinbench import Bench, MODELS; Bench().run(MODELS['latinpipe'], force=True)"
+```
+
+LatinPipe inference takes ~1–2 min per split on M1 CPU; UDPipe baseline takes ~5–10 sec (REST API).
+
+## Common gotchas
+
+- **`ModuleNotFoundError: No module named 'latinbench'`** — wrong Python interpreter. In PyCharm, fix via Settings → Interpreter. From the shell, `which python` should point at `<repo>/.venv/bin/python`.
+- **LatinPipe fails with TensorFlow import error** — the subprocess venv exists but `KERAS_BACKEND=torch` wasn't set. The bench sets it automatically; if you're invoking `latinpipe_evalatin24.py` by hand, prefix with `KERAS_BACKEND=torch`.
+- **LatinPipe checkpoint not found** — verify `checkpoints/latinpipe-evalatin24-240520/model.weights.h5` exists (≈663 MB). Re-download from the LINDAT link above.
 
 ## Adding a new model
 
