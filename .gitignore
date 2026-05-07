@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Big artefacts that shouldn't be in git
+checkpoints/
+predictions/
+*.h5
+*.pt
+*.bin
+
+# Personal notes / specs (never committed)
+.specs/
+
+# LatinPipe vendored repo's own venv (we recreate per machine)
+third_party/latinpipe/.venv/
