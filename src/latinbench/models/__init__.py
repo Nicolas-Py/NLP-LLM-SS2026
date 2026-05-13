@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ..core import Model
 from .latinpipe import LatinpipeModel
+from .ollama_llm import OllamaLLMModel
 from .udpipe import UdpipeModel
 
 
@@ -17,6 +18,7 @@ def _make_registry() -> dict[str, Model]:
     return {
         "udpipe": UdpipeModel(),
         "latinpipe": LatinpipeModel(),
+        "qwen3-ollama": OllamaLLMModel(),
     }
 
 
