@@ -156,3 +156,38 @@ Bench().run(UdpipeModel(model_id='latest'))               # auto-pick newest
 ```
 
 Each id gets its own `predictions/<id>/` cache dir, so swapping versions doesn't clobber prior results.
+
+## Trying a local LLM via Ollama
+
+A third reference model, `qwen3-ollama`, runs Qwen3-0.6B locally through Ollama
+and parses each sentence with constrained JSON-schema structured output. It's
+intentionally a weak baseline (0.6B params on a hard structural task) — useful
+as a plumbing example for LLM-based parsing rather than for the leaderboard.
+
+One-time setup:
+
+```bash
+brew install ollama
+ollama serve                    # or use the menubar app
+ollama pull qwen3:0.6b          # ~520 MB
+```
+
+Run it:
+
+```python
+from latinbench import Bench, MODELS
+Bench().run(MODELS["qwen3-ollama"])
+```
+
+Swap to any other Ollama model id by constructing directly:
+
+```python
+from latinbench import Bench
+from latinbench.models.ollama_llm import OllamaLLMModel
+Bench().run(OllamaLLMModel("qwen3:4b"))                   # different size
+Bench().run(OllamaLLMModel("llama3.2:3b"))                # different family
+```
+
+Each `model_id` gets its own `predictions/<slug>/` cache dir (`:` is sanitized
+to `-`). Expect ~5 s per short sentence on a 0.6B model — full splits take
+many minutes; the bench caches per-model so re-runs are instant.
