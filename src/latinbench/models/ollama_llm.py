@@ -4,6 +4,7 @@ See docs/superpowers/specs/2026-05-14-qwen3-ollama-llm-model-design.md.
 """
 from __future__ import annotations
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import conllu
@@ -47,25 +48,34 @@ class OllamaLLMModel(Model):
         model_id: str = DEFAULT_MODEL_ID,
         host: str = DEFAULT_HOST,
         num_ctx: int = 8192,
+        num_workers: int = 8,
     ) -> None:
         self.model_id = model_id
         self.host = host.rstrip("/")
         self.num_ctx = num_ctx
+        self.num_workers = num_workers
         self.name = model_id.replace(":", "-").replace("/", "-")
 
     def predict(self, test_path: Path, out_path: Path) -> None:
         sentences = conllu.parse(Path(test_path).read_text())
+        n_total = len(sentences)
         total_toks = 0
         total_fallback = 0
         fallback_sents = 0
-        for i, sent in enumerate(sentences):
-            n_toks, n_fb = self._parse_one(sent)
-            total_toks += n_toks
-            total_fallback += n_fb
-            if n_fb > 0:
-                fallback_sents += 1
-            if i % 25 == 0:
-                print(f"[{self.name}] {i}/{len(sentences)} sentences")
+        done = 0
+        # Each future mutates its own sentence object in place; main-thread
+        # consumption of completed futures keeps counters race-free.
+        with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
+            futures = [pool.submit(self._parse_one, s) for s in sentences]
+            for f in as_completed(futures):
+                n_toks, n_fb = f.result()
+                total_toks += n_toks
+                total_fallback += n_fb
+                if n_fb > 0:
+                    fallback_sents += 1
+                done += 1
+                if done % 25 == 0 or done == n_total:
+                    print(f"[{self.name}] {done}/{n_total} sentences")
         Path(out_path).write_text("".join(s.serialize() for s in sentences))
         pct = (100.0 * total_fallback / total_toks) if total_toks else 0.0
         print(
@@ -121,6 +131,15 @@ class OllamaLLMModel(Model):
                 n_fallback += 1
             tok["head"] = head
             tok["deprel"] = deprel
+
+        # Tree-level repair: the per-token check only validates head ranges,
+        # not cycles or root count — the UD scorer rejects either. If the
+        # result isn't a valid rooted tree, fall the whole sentence back to
+        # right-branching (already used as the per-token default).
+        if not _is_valid_tree(single):
+            for i, tok in enumerate(single):
+                tok["head"], tok["deprel"] = _right_branching_default(single, i)
+            n_fallback = len(single)
         return len(single), n_fallback
 
 
@@ -164,6 +183,27 @@ def _right_branching_default(single: list, i: int) -> tuple[int, str]:
     if i == n - 1:
         return 0, "root"
     return single[i + 1]["id"], "dep"
+
+
+def _is_valid_tree(single: list) -> bool:
+    """True if the assigned heads form a single rooted tree with no cycles."""
+    if not single:
+        return True
+    head_map = {t["id"]: t["head"] for t in single}
+    if sum(1 for h in head_map.values() if h == 0) != 1:
+        return False
+    n = len(head_map)
+    for tid in head_map:
+        cur = head_map[tid]
+        for _ in range(n + 1):
+            if cur == 0:
+                break
+            if cur not in head_map:
+                return False
+            cur = head_map[cur]
+        else:
+            return False  # cycle: walked n+1 steps without reaching root
+    return True
 
 
 def _format_sentence(single: list) -> str:
