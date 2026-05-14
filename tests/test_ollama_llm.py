@@ -384,3 +384,63 @@ def test_predict_writes_valid_conllu_with_predictions(tmp_path, capsys):
     assert "2 sentences" in out
     assert "4 tokens" in out
     assert "0 fallback tokens" in out
+
+
+def test_predict_resumes_from_partial_file(tmp_path, capsys):
+    """If a .partial.json exists from a prior crash, replay it and only
+    LLM-call the remaining sentences."""
+    test_file = tmp_path / "test.conllu"
+    test_file.write_text(
+        "# sent_id = s1\n"
+        "# text = a b\n"
+        "1\ta\ta\tX\t_\t_\t_\t_\t_\t_\n"
+        "2\tb\tb\tX\t_\t_\t_\t_\t_\t_\n"
+        "\n"
+        "# sent_id = s2\n"
+        "# text = c d\n"
+        "1\tc\tc\tX\t_\t_\t_\t_\t_\t_\n"
+        "2\td\td\tX\t_\t_\t_\t_\t_\t_\n"
+    )
+    out_file = tmp_path / "pred.conllu"
+    partial_file = out_file.with_suffix(".partial.json")
+
+    # Pretend sentence 0 was already predicted in a prior run.
+    partial_file.write_text(json.dumps({
+        "0": {
+            "tokens": {
+                "1": {"head": 2, "deprel": "nsubj"},
+                "2": {"head": 0, "deprel": "root"},
+            },
+            "n_toks": 2,
+            "n_fb": 0,
+        }
+    }))
+
+    # The fake only needs to respond for sentence 1; sentence 0 comes from partial.
+    n_calls = {"count": 0}
+
+    class _CountingFake(_FakeModel):
+        def _call_ollama(self, single):
+            n_calls["count"] += 1
+            return {"tokens": [
+                {"id": 1, "head": 2, "deprel": "nsubj"},
+                {"id": 2, "head": 0, "deprel": "root"},
+            ]}
+
+    model = _CountingFake({})
+    model.num_workers = 1
+    model.predict(test_file, out_file)
+
+    # Only one LLM call was made (sentence 1); sentence 0 was replayed.
+    assert n_calls["count"] == 1
+
+    # Output has both sentences with correct predictions.
+    parsed = conllu.parse(out_file.read_text())
+    assert len(parsed) == 2
+    assert [(t["head"], t["deprel"]) for t in parsed[0]] == [(2, "nsubj"), (0, "root")]
+    assert [(t["head"], t["deprel"]) for t in parsed[1]] == [(2, "nsubj"), (0, "root")]
+    # Partial file is cleaned up after successful run.
+    assert not partial_file.exists()
+    # Resume notice printed.
+    out = capsys.readouterr().out
+    assert "resuming" in out
