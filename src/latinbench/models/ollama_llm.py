@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 
 import conllu
 import requests
@@ -59,27 +60,71 @@ class OllamaLLMModel(Model):
     def predict(self, test_path: Path, out_path: Path) -> None:
         sentences = conllu.parse(Path(test_path).read_text())
         n_total = len(sentences)
-        total_toks = 0
-        total_fallback = 0
-        fallback_sents = 0
-        done = 0
-        # Each future mutates its own sentence object in place; main-thread
-        # consumption of completed futures keeps counters race-free.
-        with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
-            futures = [pool.submit(self._parse_one, s) for s in sentences]
-            for f in as_completed(futures):
-                n_toks, n_fb = f.result()
-                total_toks += n_toks
-                total_fallback += n_fb
-                if n_fb > 0:
-                    fallback_sents += 1
-                done += 1
-                if done % 25 == 0 or done == n_total:
-                    print(f"[{self.name}] {done}/{n_total} sentences")
+        partial_path = Path(out_path).with_suffix(".partial.json")
+
+        # Resume: if a partial file exists from a prior crashed run, replay it
+        # back onto the sentence list and only process the remaining indices.
+        partial: dict[str, dict] = {}
+        done_idx: set[int] = set()
+        if partial_path.exists():
+            try:
+                partial = json.loads(partial_path.read_text())
+            except (ValueError, OSError):
+                partial = {}
+            for idx_str, sent_state in partial.items():
+                idx = int(idx_str)
+                if idx >= n_total:
+                    continue
+                tokens_state = sent_state.get("tokens", {})
+                for tok in sentences[idx]:
+                    if isinstance(tok["id"], int):
+                        s = tokens_state.get(str(tok["id"]))
+                        if s:
+                            tok["head"] = s["head"]
+                            tok["deprel"] = s["deprel"]
+                done_idx.add(idx)
+            if done_idx:
+                print(f"[{self.name}] resuming: {len(done_idx)}/{n_total} sentences cached")
+
+        pending_idx = [i for i in range(n_total) if i not in done_idx]
+        total_toks = sum(p.get("n_toks", 0) for p in partial.values())
+        total_fallback = sum(p.get("n_fb", 0) for p in partial.values())
+        fallback_sents = sum(1 for p in partial.values() if p.get("n_fb", 0) > 0)
+        done = len(done_idx)
+        lock = Lock()
+
+        if pending_idx:
+            with ThreadPoolExecutor(max_workers=self.num_workers) as pool:
+                future_to_idx = {
+                    pool.submit(self._parse_one, sentences[i]): i for i in pending_idx
+                }
+                for f in as_completed(future_to_idx):
+                    idx = future_to_idx[f]
+                    n_toks, n_fb = f.result()
+                    total_toks += n_toks
+                    total_fallback += n_fb
+                    if n_fb > 0:
+                        fallback_sents += 1
+                    with lock:
+                        partial[str(idx)] = {
+                            "tokens": {
+                                str(t["id"]): {"head": t["head"], "deprel": t["deprel"]}
+                                for t in sentences[idx] if isinstance(t["id"], int)
+                            },
+                            "n_toks": n_toks,
+                            "n_fb": n_fb,
+                        }
+                        partial_path.write_text(json.dumps(partial))
+                    done += 1
+                    if done % 25 == 0 or done == n_total:
+                        print(f"[{self.name}] {done}/{n_total} sentences")
+
         Path(out_path).write_text("".join(s.serialize() for s in sentences))
+        partial_path.unlink(missing_ok=True)
+
         pct = (100.0 * total_fallback / total_toks) if total_toks else 0.0
         print(
-            f"[{self.name}] {len(sentences)} sentences, {total_toks} tokens; "
+            f"[{self.name}] {n_total} sentences, {total_toks} tokens; "
             f"{total_fallback} fallback tokens ({pct:.1f}%) across "
             f"{fallback_sents} sentences"
         )

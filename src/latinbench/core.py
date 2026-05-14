@@ -36,26 +36,31 @@ class Bench:
         """Run model on all splits, score each, cache results.
 
         Returns: {split: {metric: {P, R, F1}}}.
-        Caches at predictions/<model.name>/scores.json — re-running is instant
-        unless `force=True` or the cache is missing.
+        Cache file `predictions/<model.name>/scores.json` is updated after
+        every split, so a crash on later splits doesn't lose earlier scores.
+        Pass `force=True` to ignore the cache and rebuild from scratch.
         """
         out_dir = PREDICTIONS_DIR / model.name
         out_dir.mkdir(parents=True, exist_ok=True)
         cache = out_dir / "scores.json"
 
-        if cache.exists() and not force:
-            return json.loads(cache.read_text())
-
         scores: dict = {}
+        if cache.exists() and not force:
+            scores = json.loads(cache.read_text())
+            if all(s in scores for s in self.splits):
+                return scores
+
         for split in self.splits:
+            if split in scores and not force:
+                continue
             pred = out_dir / f"{split}_pred.conllu"
             if force or not pred.exists():
                 print(f"[{model.name}] predicting {split}…")
                 model.predict(test_path(split), pred)
             print(f"[{model.name}] scoring {split}…")
             scores[split] = _score(gold_path(split), pred)
+            cache.write_text(json.dumps(scores, indent=2))
 
-        cache.write_text(json.dumps(scores, indent=2))
         return scores
 
     def compare(
