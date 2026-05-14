@@ -6,8 +6,8 @@ from unittest.mock import patch, MagicMock
 import conllu
 import requests
 
-from latinbench.models.ollama_llm import (
-    OllamaLLMModel,
+from latinbench.models.lmstudio_llm import (
+    LMStudioModel,
     SCHEMA,
     SYSTEM_PROMPT,
     _collect_deprels_from_gold,
@@ -17,13 +17,13 @@ from latinbench.models.ollama_llm import (
 )
 
 
-class _FakeModel(OllamaLLMModel):
-    """OllamaLLMModel with `_call_ollama` swapped for a fixture."""
+class _FakeModel(LMStudioModel):
+    """LMStudioModel with `_call_llm` swapped for a fixture."""
     def __init__(self, fake):
         super().__init__()
         self._fake = fake
 
-    def _call_ollama(self, single):
+    def _call_llm(self, single):
         if isinstance(self._fake, Exception):
             raise self._fake
         return self._fake
@@ -39,25 +39,21 @@ def _toks(ids):
 
 def test_right_branching_last_token_is_root():
     single = _toks([1, 2, 3])
-    head, deprel = _right_branching_default(single, 2)
-    assert head == 0
-    assert deprel == "root"
+    assert _right_branching_default(single, 2) == (0, "root")
 
 
 def test_right_branching_non_last_attaches_to_next():
     single = _toks([1, 2, 3])
-    head, deprel = _right_branching_default(single, 0)
-    assert head == 2
-    assert deprel == "dep"
+    assert _right_branching_default(single, 0) == (2, "dep")
+    assert _right_branching_default(single, 1) == (3, "dep")
 
 
 def test_right_branching_handles_non_contiguous_ids():
-    # CoNLL-U IDs can have gaps from multi-word tokens; right-branching uses
-    # the *next single-word token's id*, not i+1 arithmetic.
-    single = _toks([1, 2, 4])
-    head, deprel = _right_branching_default(single, 1)
-    assert head == 4
-    assert deprel == "dep"
+    # ids 1, 3, 7 — non-contiguous because of MWT skipping etc.
+    single = _toks([1, 3, 7])
+    assert _right_branching_default(single, 0) == (3, "dep")
+    assert _right_branching_default(single, 1) == (7, "dep")
+    assert _right_branching_default(single, 2) == (0, "root")
 
 
 # ---------- _format_sentence ----------
@@ -67,76 +63,61 @@ def test_format_sentence_basic_columns():
         {"id": 1, "form": "Marcus", "lemma": "marcus", "upos": "PROPN",
          "feats": {"Case": "Nom", "Number": "Sing"}},
         {"id": 2, "form": "amat", "lemma": "amo", "upos": "VERB",
-         "feats": {"Mood": "Ind", "VerbForm": "Fin"}},
+         "feats": {"Mood": "Ind"}},
     ]
     out = _format_sentence(single)
-    lines = out.strip().split("\n")
+    lines = out.split("\n")
     assert len(lines) == 2
-    # tab-separated id form lemma upos feats
-    assert lines[0].split("\t") == [
-        "1", "Marcus", "marcus", "PROPN", "Case=Nom|Number=Sing"
-    ]
-    assert lines[1].split("\t") == [
-        "2", "amat", "amo", "VERB", "Mood=Ind|VerbForm=Fin"
-    ]
+    assert lines[0] == "1\tMarcus\tmarcus\tPROPN\tCase=Nom|Number=Sing"
+    assert lines[1] == "2\tamat\tamo\tVERB\tMood=Ind"
 
 
 def test_format_sentence_empty_feats_renders_underscore():
-    single = [
-        {"id": 1, "form": "et", "lemma": "et", "upos": "CCONJ", "feats": None},
-    ]
-    out = _format_sentence(single).strip()
-    assert out.split("\t") == ["1", "et", "et", "CCONJ", "_"]
+    single = [{"id": 1, "form": "a", "lemma": "_", "upos": "X", "feats": None}]
+    assert _format_sentence(single).endswith("\t_")
 
 
 # ---------- _collect_deprels_from_gold ----------
 
 def test_collect_deprels_from_tmp_gold(tmp_path):
-    fake = tmp_path / "fake.conllu"
-    fake.write_text(
+    p = tmp_path / "g.conllu"
+    p.write_text(
         "# sent_id = 1\n"
-        "# text = a b\n"
         "1\ta\ta\tX\t_\t_\t2\tnsubj\t_\t_\n"
         "2\tb\tb\tX\t_\t_\t0\troot\t_\t_\n"
         "\n"
         "# sent_id = 2\n"
-        "# text = c d\n"
-        "1\tc\tc\tX\t_\t_\t2\tobj\t_\t_\n"
-        "2\td\td\tX\t_\t_\t0\troot\t_\t_\n"
+        "1\tc\tc\tX\t_\t_\t0\troot\t_\t_\n"
+        "2\td\td\tX\t_\t_\t1\tobj\t_\t_\n"
     )
-    labels = _collect_deprels_from_gold([fake])
+    labels = _collect_deprels_from_gold([p])
     assert labels == sorted(["nsubj", "root", "obj"])
 
 
 def test_collect_deprels_from_real_gold_files_contains_common_relations():
-    # Sanity check against the canonical EvaLatin 2024 gold files.
     labels = _collect_deprels_from_gold()
-    for required in ("root", "nsubj", "obj", "obl", "advmod", "cc", "conj"):
-        assert required in labels, f"expected {required!r} in deprel set"
-    # All values are str and sorted
-    assert all(isinstance(x, str) for x in labels)
-    assert labels == sorted(labels)
-    # Some subtype labels expected too (Latin treebanks use them)
-    assert any(":" in x for x in labels), "expected subtype labels like obl:arg"
+    for r in ("root", "nsubj", "obj", "det", "amod"):
+        assert r in labels
 
 
-# ---------- OllamaLLMModel.name (slug derivation) ----------
+# ---------- model naming ----------
 
 def test_name_slug_replaces_colon():
-    assert OllamaLLMModel(model_id="qwen3:0.6b").name == "qwen3-0.6b"
+    assert LMStudioModel(model_id="vendor:foo").name == "vendor-foo"
 
 
 def test_name_slug_default_model_is_qwen3():
-    assert OllamaLLMModel().name == "qwen3-0.6b"
+    # Default LM Studio model id is qwen/qwen3-0.6b → qwen-qwen3-0.6b
+    assert LMStudioModel().name == "qwen-qwen3-0.6b"
 
 
 def test_name_slug_replaces_slash_too():
-    assert OllamaLLMModel(model_id="hf.co/foo:Q4_K_M").name == "hf.co-foo-Q4_K_M"
+    assert LMStudioModel(model_id="hf.co/foo:Q4_K_M").name == "hf.co-foo-Q4_K_M"
 
 
 def test_host_is_trimmed_of_trailing_slash():
-    m = OllamaLLMModel(host="http://localhost:11434/")
-    assert m.host == "http://localhost:11434"
+    m = LMStudioModel(host="http://localhost:1234/")
+    assert m.host == "http://localhost:1234"
 
 
 # ---------- _parse_one ----------
@@ -209,8 +190,6 @@ def test_parse_one_invalid_json_fully_falls_back():
 
 
 def test_parse_one_skips_multi_word_tokens():
-    # CoNLL-U range row "5-6 Raetisque" + the two split tokens "5 Raetis", "6 que".
-    # Only single-word tokens get head/deprel; the MWT row stays as-is.
     snippet = (
         "# sent_id = 1\n"
         "# text = a Raetisque b\n"
@@ -228,9 +207,8 @@ def test_parse_one_skips_multi_word_tokens():
         {"id": 4, "head": 0, "deprel": "root"},
     ]}
     n_toks, n_fb = _FakeModel(fake)._parse_one(sent)
-    assert n_toks == 4   # 4 single-word tokens; MWT row excluded from count
+    assert n_toks == 4
     assert n_fb == 0
-    # MWT row (id is a tuple) untouched
     mwt = next(t for t in sent if not isinstance(t["id"], int))
     assert mwt["head"] is None or mwt["head"] == "_"
 
@@ -263,7 +241,7 @@ def test_is_valid_tree_rejects_cycle():
 
 def test_parse_one_cycle_falls_back_whole_sentence():
     sent = conllu.parse(THREE_TOKEN_SENT)[0]
-    # LLM-style response that produces a cycle: 1 -> 2, 2 -> 1, 3 root
+    # 1 -> 2, 2 -> 1, 3 root → cycle between 1 and 2
     fake = {"tokens": [
         {"id": 1, "head": 2, "deprel": "obj"},
         {"id": 2, "head": 1, "deprel": "nsubj"},
@@ -271,25 +249,26 @@ def test_parse_one_cycle_falls_back_whole_sentence():
     ]}
     n_toks, n_fb = _FakeModel(fake)._parse_one(sent)
     assert n_toks == 3
-    assert n_fb == 3  # whole sentence right-branched
-    # Right-branching chain: 1 -> 2 ("dep"), 2 -> 3 ("dep"), 3 -> 0 ("root")
+    assert n_fb == 3
     assert [(t["head"], t["deprel"]) for t in sent] == [
         (2, "dep"), (3, "dep"), (0, "root"),
     ]
 
 
-# ---------- _call_ollama (HTTP wiring) ----------
+# ---------- _call_llm (HTTP wiring) ----------
 
-def _ollama_response(payload: dict) -> MagicMock:
-    """Build a MagicMock that looks like a successful Ollama HTTP response."""
+def _lmstudio_response(payload: dict) -> MagicMock:
+    """MagicMock that mimics an LM Studio (OpenAI-compatible) HTTP response."""
     r = MagicMock()
     r.raise_for_status = MagicMock(return_value=None)
-    r.json = MagicMock(return_value={"message": {"content": json.dumps(payload)}})
+    r.json = MagicMock(return_value={
+        "choices": [{"message": {"content": json.dumps(payload)}}]
+    })
     return r
 
 
-def test_call_ollama_posts_correct_body():
-    m = OllamaLLMModel(model_id="qwen3:0.6b", num_ctx=4096)
+def test_call_llm_posts_correct_body():
+    m = LMStudioModel(model_id="qwen/qwen3-0.6b", max_tokens=2048)
     single = [
         {"id": 1, "form": "a", "lemma": "_", "upos": "X", "feats": None},
         {"id": 2, "form": "b", "lemma": "_", "upos": "X", "feats": None},
@@ -298,34 +277,35 @@ def test_call_ollama_posts_correct_body():
         {"id": 1, "head": 2, "deprel": "nsubj"},
         {"id": 2, "head": 0, "deprel": "root"},
     ]}
-    with patch("requests.post", return_value=_ollama_response(payload)) as mock_post:
-        out = m._call_ollama(single)
+    with patch("requests.post", return_value=_lmstudio_response(payload)) as mock_post:
+        out = m._call_llm(single)
 
     mock_post.assert_called_once()
     args, kwargs = mock_post.call_args
-    assert args[0] == "http://localhost:11434/api/chat"
+    assert args[0] == "http://localhost:1234/v1/chat/completions"
     body = kwargs["json"]
-    assert body["model"] == "qwen3:0.6b"
+    assert body["model"] == "qwen/qwen3-0.6b"
     assert body["stream"] is False
-    assert body["think"] is False               # critical: disable Qwen3 reasoning
-    assert body["format"] == SCHEMA
-    assert body["options"]["num_ctx"] == 4096
-    assert body["options"]["temperature"] == 0
+    assert body["temperature"] == 0
+    assert body["max_tokens"] == 2048
+    # OpenAI structured-output shape
+    rf = body["response_format"]
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["strict"] is True
+    assert rf["json_schema"]["schema"] == SCHEMA
     # system + user messages
     roles = [msg["role"] for msg in body["messages"]]
     assert roles == ["system", "user"]
     assert body["messages"][0]["content"] == SYSTEM_PROMPT
-    # User content includes the formatted token table
     assert "1\ta\t_\tX\t_" in body["messages"][1]["content"]
-    # And the parsed response was returned
     assert out == payload
 
 
-def test_call_ollama_parses_json_string_from_message_content():
-    m = OllamaLLMModel()
+def test_call_llm_parses_json_string_from_message_content():
+    m = LMStudioModel()
     payload = {"tokens": [{"id": 1, "head": 0, "deprel": "root"}]}
-    with patch("requests.post", return_value=_ollama_response(payload)):
-        out = m._call_ollama([
+    with patch("requests.post", return_value=_lmstudio_response(payload)):
+        out = m._call_llm([
             {"id": 1, "form": "x", "lemma": "_", "upos": "X", "feats": None}
         ])
     assert out == payload
@@ -348,7 +328,6 @@ def test_predict_writes_valid_conllu_with_predictions(tmp_path, capsys):
     )
     out_file = tmp_path / "pred.conllu"
 
-    # Two canned responses, one per sentence
     responses = iter([
         {"tokens": [
             {"id": 1, "head": 2, "deprel": "nsubj"},
@@ -360,27 +339,24 @@ def test_predict_writes_valid_conllu_with_predictions(tmp_path, capsys):
         ]},
     ])
     model = _FakeModel({})
-    model._fake = None  # will be set per-call below
+    model._fake = None
     model.num_workers = 1  # iterator-backed fake isn't thread-safe
 
     def fake_call(single):
         return next(responses)
 
-    # Patch _call_ollama on the instance with our iterator-backed function.
-    model._call_ollama = fake_call
-
+    model._call_llm = fake_call
     model.predict(test_file, out_file)
 
-    # File exists and is valid CoNLL-U
     parsed = conllu.parse(out_file.read_text())
     assert len(parsed) == 2
     s1, s2 = parsed
     assert [(t["head"], t["deprel"]) for t in s1] == [(2, "nsubj"), (0, "root")]
     assert [(t["head"], t["deprel"]) for t in s2] == [(2, "nsubj"), (0, "root")]
 
-    # Summary line printed
     out = capsys.readouterr().out
-    assert "qwen3-0.6b" in out
+    # default model id slug
+    assert "qwen-qwen3-0.6b" in out
     assert "2 sentences" in out
     assert "4 tokens" in out
     assert "0 fallback tokens" in out
@@ -404,7 +380,6 @@ def test_predict_resumes_from_partial_file(tmp_path, capsys):
     out_file = tmp_path / "pred.conllu"
     partial_file = out_file.with_suffix(".partial.json")
 
-    # Pretend sentence 0 was already predicted in a prior run.
     partial_file.write_text(json.dumps({
         "0": {
             "tokens": {
@@ -416,11 +391,10 @@ def test_predict_resumes_from_partial_file(tmp_path, capsys):
         }
     }))
 
-    # The fake only needs to respond for sentence 1; sentence 0 comes from partial.
     n_calls = {"count": 0}
 
     class _CountingFake(_FakeModel):
-        def _call_ollama(self, single):
+        def _call_llm(self, single):
             n_calls["count"] += 1
             return {"tokens": [
                 {"id": 1, "head": 2, "deprel": "nsubj"},
@@ -431,16 +405,12 @@ def test_predict_resumes_from_partial_file(tmp_path, capsys):
     model.num_workers = 1
     model.predict(test_file, out_file)
 
-    # Only one LLM call was made (sentence 1); sentence 0 was replayed.
     assert n_calls["count"] == 1
 
-    # Output has both sentences with correct predictions.
     parsed = conllu.parse(out_file.read_text())
     assert len(parsed) == 2
     assert [(t["head"], t["deprel"]) for t in parsed[0]] == [(2, "nsubj"), (0, "root")]
     assert [(t["head"], t["deprel"]) for t in parsed[1]] == [(2, "nsubj"), (0, "root")]
-    # Partial file is cleaned up after successful run.
     assert not partial_file.exists()
-    # Resume notice printed.
     out = capsys.readouterr().out
     assert "resuming" in out

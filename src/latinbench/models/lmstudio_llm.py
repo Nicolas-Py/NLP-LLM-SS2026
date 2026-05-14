@@ -1,6 +1,7 @@
-"""Local-LLM dependency parser via Ollama with constrained JSON-schema output.
+"""Local-LLM dependency parser via LM Studio (OpenAI-compatible API).
 
-See docs/superpowers/specs/2026-05-14-qwen3-ollama-llm-model-design.md.
+LM Studio exposes any loaded model behind `POST /v1/chat/completions` and
+supports structured output via `response_format: {type: "json_schema", ...}`.
 """
 from __future__ import annotations
 import json
@@ -39,22 +40,22 @@ Example output:
 """
 
 
-DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_MODEL_ID = "qwen3:0.6b"
+DEFAULT_HOST = "http://localhost:1234"
+DEFAULT_MODEL_ID = "qwen/qwen3-0.6b"
 
 
-class OllamaLLMModel(Model):
+class LMStudioModel(Model):
     def __init__(
         self,
         model_id: str = DEFAULT_MODEL_ID,
         host: str = DEFAULT_HOST,
-        num_ctx: int = 8192,
         num_workers: int = 8,
+        max_tokens: int = 4096,
     ) -> None:
         self.model_id = model_id
         self.host = host.rstrip("/")
-        self.num_ctx = num_ctx
         self.num_workers = num_workers
+        self.max_tokens = max_tokens
         self.name = model_id.replace(":", "-").replace("/", "-")
 
     def predict(self, test_path: Path, out_path: Path) -> None:
@@ -129,21 +130,28 @@ class OllamaLLMModel(Model):
             f"{fallback_sents} sentences"
         )
 
-    def _call_ollama(self, single: list) -> dict:
+    def _call_llm(self, single: list) -> dict:
         body = {
             "model": self.model_id,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": _format_sentence(single)},
             ],
-            "format": SCHEMA,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ud_parse",
+                    "strict": True,
+                    "schema": SCHEMA,
+                },
+            },
             "stream": False,
-            "think": False,
-            "options": {"num_ctx": self.num_ctx, "temperature": 0},
+            "temperature": 0,
+            "max_tokens": self.max_tokens,
         }
-        r = requests.post(f"{self.host}/api/chat", json=body, timeout=120)
+        r = requests.post(f"{self.host}/v1/chat/completions", json=body, timeout=180)
         r.raise_for_status()
-        content = r.json()["message"]["content"]
+        content = r.json()["choices"][0]["message"]["content"]
         return json.loads(content)
 
     def _parse_one(self, sent: conllu.TokenList) -> tuple[int, int]:
@@ -151,7 +159,7 @@ class OllamaLLMModel(Model):
         valid_ids = {t["id"] for t in single}
 
         try:
-            response = self._call_ollama(single)
+            response = self._call_llm(single)
             pred_by_id = {
                 p["id"]: p for p in response.get("tokens", [])
                 if isinstance(p, dict) and isinstance(p.get("id"), int)
@@ -177,10 +185,9 @@ class OllamaLLMModel(Model):
             tok["head"] = head
             tok["deprel"] = deprel
 
-        # Tree-level repair: the per-token check only validates head ranges,
-        # not cycles or root count — the UD scorer rejects either. If the
-        # result isn't a valid rooted tree, fall the whole sentence back to
-        # right-branching (already used as the per-token default).
+        # Tree-level repair: cycles + multi-root would crash the UD scorer.
+        # If the result isn't a valid rooted tree, fall the whole sentence
+        # back to right-branching (already used as the per-token default).
         if not _is_valid_tree(single):
             for i, tok in enumerate(single):
                 tok["head"], tok["deprel"] = _right_branching_default(single, i)
