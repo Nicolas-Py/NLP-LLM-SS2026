@@ -107,8 +107,8 @@ def test_name_slug_replaces_colon():
 
 
 def test_name_slug_default_model_is_qwen3():
-    # Default LM Studio model id is qwen/qwen3-0.6b → qwen-qwen3-0.6b
-    assert LMStudioModel().name == "qwen-qwen3-0.6b"
+    # Default LM Studio model id is qwen3-0.6b-mlx (no : or /)
+    assert LMStudioModel().name == "qwen3-0.6b-mlx"
 
 
 def test_name_slug_replaces_slash_too():
@@ -268,7 +268,7 @@ def _lmstudio_response(payload: dict) -> MagicMock:
 
 
 def test_call_llm_posts_correct_body():
-    m = LMStudioModel(model_id="qwen/qwen3-0.6b", max_tokens=2048)
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", max_tokens=2048)
     single = [
         {"id": 1, "form": "a", "lemma": "_", "upos": "X", "feats": None},
         {"id": 2, "form": "b", "lemma": "_", "upos": "X", "feats": None},
@@ -284,9 +284,9 @@ def test_call_llm_posts_correct_body():
     args, kwargs = mock_post.call_args
     assert args[0] == "http://localhost:1234/v1/chat/completions"
     body = kwargs["json"]
-    assert body["model"] == "qwen/qwen3-0.6b"
+    assert body["model"] == "qwen3-0.6b-mlx"
     assert body["stream"] is False
-    assert body["temperature"] == 0
+    assert body["temperature"] == 0.3
     assert body["max_tokens"] == 2048
     # OpenAI structured-output shape
     rf = body["response_format"]
@@ -297,7 +297,11 @@ def test_call_llm_posts_correct_body():
     roles = [msg["role"] for msg in body["messages"]]
     assert roles == ["system", "user"]
     assert body["messages"][0]["content"] == SYSTEM_PROMPT
-    assert "1\ta\t_\tX\t_" in body["messages"][1]["content"]
+    # User message contains the token table + the explicit count/id hint
+    user_msg = body["messages"][1]["content"]
+    assert "1\ta\t_\tX\t_" in user_msg
+    assert "2 tokens" in user_msg
+    assert "[1, 2]" in user_msg
     assert out == payload
 
 
@@ -356,7 +360,7 @@ def test_predict_writes_valid_conllu_with_predictions(tmp_path, capsys):
 
     out = capsys.readouterr().out
     # default model id slug
-    assert "qwen-qwen3-0.6b" in out
+    assert "qwen3-0.6b-mlx" in out
     assert "2 sentences" in out
     assert "4 tokens" in out
     assert "0 fallback tokens" in out
