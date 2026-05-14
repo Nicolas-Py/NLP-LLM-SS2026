@@ -12,6 +12,7 @@ from latinbench.models.ollama_llm import (
     SYSTEM_PROMPT,
     _collect_deprels_from_gold,
     _format_sentence,
+    _is_valid_tree,
     _right_branching_default,
 )
 
@@ -234,6 +235,49 @@ def test_parse_one_skips_multi_word_tokens():
     assert mwt["head"] is None or mwt["head"] == "_"
 
 
+# ---------- _is_valid_tree + tree-level fallback ----------
+
+def _toks_with_heads(triples):
+    """[(id, head, deprel), ...] -> list of dict tokens."""
+    return [{"id": i, "head": h, "deprel": d} for i, h, d in triples]
+
+
+def test_is_valid_tree_accepts_well_formed_tree():
+    assert _is_valid_tree(_toks_with_heads([(1, 3, "nsubj"), (2, 3, "obj"), (3, 0, "root")]))
+
+
+def test_is_valid_tree_rejects_two_roots():
+    assert not _is_valid_tree(_toks_with_heads([(1, 0, "root"), (2, 0, "root"), (3, 1, "dep")]))
+
+
+def test_is_valid_tree_rejects_no_root():
+    assert not _is_valid_tree(_toks_with_heads([(1, 2, "dep"), (2, 1, "dep")]))
+
+
+def test_is_valid_tree_rejects_cycle():
+    # 1 -> 2 -> 3 -> 1 cycle, with 4 as root (one root, but cycle exists)
+    assert not _is_valid_tree(
+        _toks_with_heads([(1, 2, "dep"), (2, 3, "dep"), (3, 1, "dep"), (4, 0, "root")])
+    )
+
+
+def test_parse_one_cycle_falls_back_whole_sentence():
+    sent = conllu.parse(THREE_TOKEN_SENT)[0]
+    # LLM-style response that produces a cycle: 1 -> 2, 2 -> 1, 3 root
+    fake = {"tokens": [
+        {"id": 1, "head": 2, "deprel": "obj"},
+        {"id": 2, "head": 1, "deprel": "nsubj"},
+        {"id": 3, "head": 0, "deprel": "root"},
+    ]}
+    n_toks, n_fb = _FakeModel(fake)._parse_one(sent)
+    assert n_toks == 3
+    assert n_fb == 3  # whole sentence right-branched
+    # Right-branching chain: 1 -> 2 ("dep"), 2 -> 3 ("dep"), 3 -> 0 ("root")
+    assert [(t["head"], t["deprel"]) for t in sent] == [
+        (2, "dep"), (3, "dep"), (0, "root"),
+    ]
+
+
 # ---------- _call_ollama (HTTP wiring) ----------
 
 def _ollama_response(payload: dict) -> MagicMock:
@@ -317,6 +361,7 @@ def test_predict_writes_valid_conllu_with_predictions(tmp_path, capsys):
     ])
     model = _FakeModel({})
     model._fake = None  # will be set per-call below
+    model.num_workers = 1  # iterator-backed fake isn't thread-safe
 
     def fake_call(single):
         return next(responses)
