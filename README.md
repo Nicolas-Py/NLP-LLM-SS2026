@@ -157,37 +157,41 @@ Bench().run(UdpipeModel(model_id='latest'))               # auto-pick newest
 
 Each id gets its own `predictions/<id>/` cache dir, so swapping versions doesn't clobber prior results.
 
-## Trying a local LLM via Ollama
+## Trying a local LLM via LM Studio
 
-A third reference model, `qwen3-ollama`, runs Qwen3-0.6B locally through Ollama
-and parses each sentence with constrained JSON-schema structured output. It's
-intentionally a weak baseline (0.6B params on a hard structural task) — useful
-as a plumbing example for LLM-based parsing rather than for the leaderboard.
+A third reference model, `qwen3-lmstudio`, runs Qwen3-0.6B locally through
+[LM Studio](https://lmstudio.ai/) (MLX runtime on Apple Silicon) and parses each
+sentence with constrained JSON-schema structured output. It's intentionally a
+weak baseline (0.6B params on a hard structural task) — useful as a plumbing
+example for LLM-based parsing rather than for the leaderboard.
 
 One-time setup:
 
-```bash
-brew install ollama
-ollama serve                    # or use the menubar app
-ollama pull qwen3:0.6b          # ~520 MB
-```
+1. Install [LM Studio](https://lmstudio.ai/).
+2. **Discover** tab → search "Qwen3 0.6B MLX" → download `lmstudio-community/Qwen3-0.6B-MLX-4bit` (~400 MB).
+3. **Developer** tab → load the model → **Start Server** (defaults to port 1234).
+4. Recommended server settings: max parallel requests **8**, Flash Attention **on**, KV cache **q8_0**.
+5. Sanity check: `curl http://localhost:1234/v1/models` should list the loaded model.
 
 Run it:
 
 ```python
 from latinbench import Bench, MODELS
-Bench().run(MODELS["qwen3-ollama"])
+Bench().run(MODELS["qwen3-lmstudio"])
 ```
 
-Swap to any other Ollama model id by constructing directly:
+Swap to any other model loaded in LM Studio by constructing directly (pass the
+exact id LM Studio reports for `GET /v1/models`):
 
 ```python
 from latinbench import Bench
-from latinbench.models.ollama_llm import OllamaLLMModel
-Bench().run(OllamaLLMModel("qwen3:4b"))                   # different size
-Bench().run(OllamaLLMModel("llama3.2:3b"))                # different family
+from latinbench.models.lmstudio_llm import LMStudioModel
+Bench().run(LMStudioModel("qwen/qwen3-4b"))               # different size
+Bench().run(LMStudioModel("meta-llama/llama-3.2-3b"))     # different family
 ```
 
-Each `model_id` gets its own `predictions/<slug>/` cache dir (`:` is sanitized
-to `-`). Expect ~5 s per short sentence on a 0.6B model — full splits take
-many minutes; the bench caches per-model so re-runs are instant.
+Each `model_id` gets its own `predictions/<slug>/` cache dir (`:` and `/` are
+sanitized to `-`). Expect ~5 s per short sentence on a 0.6B model — full splits
+take many minutes; the bench caches per-model so re-runs are instant. A
+`<pred>.partial.json` sidecar updates as each sentence completes so a crash
+mid-predict resumes from where it left off.
