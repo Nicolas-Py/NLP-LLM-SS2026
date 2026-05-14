@@ -17,31 +17,21 @@ from ..data import gold_path
 
 
 SYSTEM_PROMPT = """\
-You are a Universal Dependencies parser for Latin. Given a list of tokens \
-with their lemma, UPOS, and morphological features, output the syntactic \
-head ID and dependency relation for each token, in input order.
+You are a Universal Dependencies parser for Latin. The user will give you a \
+table of tokens with their lemma, UPOS, and morphological features. You must \
+predict the syntactic head and dependency relation for every token.
 
 Rules:
-- `head` is the parent token's ID, or 0 if this token is the root.
-- Exactly one token in the sentence has head=0 with deprel="root".
-- `deprel` must be from the provided vocabulary.
-
-Example input:
-1\tMarcus\tmarcus\tPROPN\tCase=Nom|Number=Sing
-2\tpuellam\tpuella\tNOUN\tCase=Acc|Number=Sing
-3\tamat\tamo\tVERB\tMood=Ind|Person=3|VerbForm=Fin
-
-Example output:
-{"tokens": [
-  {"id": 1, "head": 3, "deprel": "nsubj"},
-  {"id": 2, "head": 3, "deprel": "obj"},
-  {"id": 3, "head": 0, "deprel": "root"}
-]}
+- Output exactly one entry per input token, in the order given.
+- Preserve the input ids exactly (do not renumber, do not invent new ids).
+- `head` is the parent token's id (within the sentence's id range), or 0 if this token is the root.
+- Exactly one token has head=0 with deprel="root".
+- `deprel` must be a valid Universal Dependencies relation.
 """
 
 
 DEFAULT_HOST = "http://localhost:1234"
-DEFAULT_MODEL_ID = "qwen/qwen3-0.6b"
+DEFAULT_MODEL_ID = "qwen3-0.6b-mlx"
 
 
 class LMStudioModel(Model):
@@ -51,11 +41,13 @@ class LMStudioModel(Model):
         host: str = DEFAULT_HOST,
         num_workers: int = 8,
         max_tokens: int = 4096,
+        temperature: float = 0.3,
     ) -> None:
         self.model_id = model_id
         self.host = host.rstrip("/")
         self.num_workers = num_workers
         self.max_tokens = max_tokens
+        self.temperature = temperature
         self.name = model_id.replace(":", "-").replace("/", "-")
 
     def predict(self, test_path: Path, out_path: Path) -> None:
@@ -135,7 +127,7 @@ class LMStudioModel(Model):
             "model": self.model_id,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _format_sentence(single)},
+                {"role": "user", "content": _format_user_message(single)},
             ],
             "response_format": {
                 "type": "json_schema",
@@ -146,7 +138,7 @@ class LMStudioModel(Model):
                 },
             },
             "stream": False,
-            "temperature": 0,
+            "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
         r = requests.post(f"{self.host}/v1/chat/completions", json=body, timeout=180)
@@ -272,3 +264,20 @@ def _format_sentence(single: list) -> str:
             feats_str,
         ]))
     return "\n".join(rows)
+
+
+def _format_user_message(single: list) -> str:
+    """User-side prompt: token table preceded by an explicit count + id list.
+
+    Small models tend to collapse onto whatever example sits in the system
+    prompt; spelling out the input shape per-sentence makes it harder to
+    ignore. Each token row is `id\tform\tlemma\tupos\tfeats`.
+    """
+    ids = [t["id"] for t in single]
+    return (
+        f"Parse this Latin sentence ({len(single)} tokens, "
+        f"ids {ids}).\n\n"
+        f"{_format_sentence(single)}\n\n"
+        f"Output a JSON object with a \"tokens\" array of {len(single)} entries, "
+        f"one per row above, preserving the ids."
+    )
