@@ -13,6 +13,7 @@ from latinbench.models.lmstudio_llm import (
     _collect_deprels_from_gold,
     _format_sentence,
     _is_valid_tree,
+    _repair_tree,
     _right_branching_default,
 )
 
@@ -239,9 +240,16 @@ def test_is_valid_tree_rejects_cycle():
     )
 
 
-def test_parse_one_cycle_falls_back_whole_sentence():
+def test_parse_one_cycle_is_repaired_not_wiped():
+    """A cycle in the model output should be REPAIRED (re-point the highest-id
+    member of the cycle to the root) — not wiped to right-branching defaults.
+
+    The old behavior threw away all the model's labels for any sentence with
+    a structurally invalid tree, which discarded perfectly good per-token
+    predictions for ~half the sentences on real bench runs.
+    """
     sent = conllu.parse(THREE_TOKEN_SENT)[0]
-    # 1 -> 2, 2 -> 1, 3 root → cycle between 1 and 2
+    # 1 -> 2, 2 -> 1, 3 root → cycle between 1 and 2; highest-id member is 2
     fake = {"tokens": [
         {"id": 1, "head": 2, "deprel": "obj"},
         {"id": 2, "head": 1, "deprel": "nsubj"},
@@ -249,10 +257,160 @@ def test_parse_one_cycle_falls_back_whole_sentence():
     ]}
     n_toks, n_fb = _FakeModel(fake)._parse_one(sent)
     assert n_toks == 3
-    assert n_fb == 3
-    assert [(t["head"], t["deprel"]) for t in sent] == [
-        (2, "dep"), (3, "dep"), (0, "root"),
-    ]
+    # Cycle broken by re-pointing id=2 (highest cycle member) to root (id=3).
+    # Deprels are preserved; only id=2's head changed.
+    assert (sent[0]["head"], sent[0]["deprel"]) == (2, "obj")     # unchanged
+    assert (sent[1]["head"], sent[1]["deprel"]) == (3, "nsubj")   # head repaired
+    assert (sent[2]["head"], sent[2]["deprel"]) == (0, "root")    # unchanged
+    # n_fb counts heads we had to mutate vs what the model said: 1 here.
+    assert n_fb == 1
+
+
+def test_parse_one_multi_root_is_repaired_not_wiped():
+    """Two head=0 tokens should be reduced to one root, with the extras
+    re-pointed to the first root. Model deprels are preserved."""
+    sent = conllu.parse(THREE_TOKEN_SENT)[0]
+    fake = {"tokens": [
+        {"id": 1, "head": 0, "deprel": "root"},
+        {"id": 2, "head": 1, "deprel": "obj"},
+        {"id": 3, "head": 0, "deprel": "root"},
+    ]}
+    n_toks, n_fb = _FakeModel(fake)._parse_one(sent)
+    assert n_toks == 3
+    assert (sent[0]["head"], sent[0]["deprel"]) == (0, "root")
+    assert (sent[1]["head"], sent[1]["deprel"]) == (1, "obj")
+    # id=3 re-pointed to id=1; deprel preserved
+    assert sent[2]["head"] == 1
+    assert sent[2]["deprel"] == "root"
+    assert n_fb == 1
+
+
+# ---------- _repair_tree ----------
+
+def test_repair_tree_noop_on_valid_tree():
+    tokens = _toks_with_heads([(1, 3, "nsubj"), (2, 3, "obj"), (3, 0, "root")])
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 0
+    assert [(t["head"], t["deprel"]) for t in tokens] == [
+        (1, "nsubj"), (2, "obj"), (3, "root"),
+    ][:0] or True  # placeholder; real check below
+    # Use the same triples
+    assert tokens[0]["head"] == 3 and tokens[0]["deprel"] == "nsubj"
+    assert tokens[1]["head"] == 3 and tokens[1]["deprel"] == "obj"
+    assert tokens[2]["head"] == 0 and tokens[2]["deprel"] == "root"
+
+
+def test_repair_tree_multi_root_keeps_first_repoints_rest():
+    tokens = _toks_with_heads([
+        (1, 0, "root"),
+        (2, 0, "root"),
+        (3, 0, "root"),
+        (4, 2, "obj"),
+    ])
+    n_changed = _repair_tree(tokens)
+    # ids 2 and 3 were re-pointed to id 1 → 2 changes
+    assert n_changed == 2
+    assert tokens[0]["head"] == 0           # id=1 stays root
+    assert tokens[1]["head"] == 1           # id=2 → 1
+    assert tokens[2]["head"] == 1           # id=3 → 1
+    assert tokens[3]["head"] == 2           # id=4 unchanged (still child of id=2)
+    # Deprels untouched
+    assert [t["deprel"] for t in tokens] == ["root", "root", "root", "obj"]
+    assert _is_valid_tree(tokens)
+
+
+def test_repair_tree_no_root_promotes_last_token():
+    """If no token has head=0, promote the last token to root."""
+    tokens = _toks_with_heads([(1, 2, "obj"), (2, 1, "nsubj")])  # cycle, no root
+    n_changed = _repair_tree(tokens)
+    assert tokens[-1]["head"] == 0
+    assert tokens[-1]["deprel"] == "root"
+    assert _is_valid_tree(tokens)
+    # We changed at least the promoted token's head
+    assert n_changed >= 1
+
+
+def test_repair_tree_breaks_two_node_cycle():
+    """Cycle 1<->2 with id=3 as root; cycle is broken at the highest-id member."""
+    tokens = _toks_with_heads([
+        (1, 2, "obj"),
+        (2, 1, "nsubj"),
+        (3, 0, "root"),
+    ])
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 1
+    # id=2 (highest in cycle) re-pointed to root (id=3); deprels preserved
+    assert tokens[1]["head"] == 3
+    assert tokens[1]["deprel"] == "nsubj"
+    assert tokens[0]["head"] == 2  # unchanged
+    assert tokens[0]["deprel"] == "obj"
+    assert _is_valid_tree(tokens)
+
+
+def test_repair_tree_breaks_three_node_cycle():
+    """1 -> 2 -> 3 -> 1 cycle, id=4 root. Highest cycle member (id=3) repaired."""
+    tokens = _toks_with_heads([
+        (1, 2, "obj"),
+        (2, 3, "nmod"),
+        (3, 1, "nsubj"),
+        (4, 0, "root"),
+    ])
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 1
+    assert tokens[2]["head"] == 4  # id=3 re-pointed to root
+    assert tokens[2]["deprel"] == "nsubj"
+    assert _is_valid_tree(tokens)
+
+
+def test_repair_tree_breaks_disjoint_cycles():
+    """Two independent cycles must both be broken."""
+    tokens = _toks_with_heads([
+        (1, 2, "obj"),
+        (2, 1, "nsubj"),     # cycle A: {1, 2}
+        (3, 4, "obj"),
+        (4, 3, "nsubj"),     # cycle B: {3, 4}
+        (5, 0, "root"),
+    ])
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 2  # one head per cycle
+    assert _is_valid_tree(tokens)
+    # Highest in each cycle re-pointed to root (id=5)
+    assert tokens[1]["head"] == 5
+    assert tokens[3]["head"] == 5
+
+
+def test_repair_tree_preserves_all_deprels_except_promoted_root():
+    """Heads may change; deprels are only touched when promoting a new root."""
+    tokens = _toks_with_heads([
+        (1, 0, "root"),
+        (2, 0, "root"),
+        (3, 1, "obj"),
+    ])
+    _repair_tree(tokens)
+    # All deprels intact — repair only mutates heads in this case
+    assert [t["deprel"] for t in tokens] == ["root", "root", "obj"]
+
+
+def test_repair_tree_empty_input_no_op():
+    tokens = []
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 0
+    assert tokens == []
+
+
+def test_repair_tree_single_token_promotes_to_root():
+    tokens = _toks_with_heads([(1, 99, "nsubj")])  # head points nowhere valid
+    _repair_tree(tokens)
+    assert tokens[0]["head"] == 0
+    assert tokens[0]["deprel"] == "root"
+    assert _is_valid_tree(tokens)
+
+
+def test_repair_tree_single_token_already_root_is_noop():
+    tokens = _toks_with_heads([(1, 0, "root")])
+    n_changed = _repair_tree(tokens)
+    assert n_changed == 0
+    assert tokens[0]["head"] == 0
 
 
 # ---------- _call_llm (HTTP wiring) ----------

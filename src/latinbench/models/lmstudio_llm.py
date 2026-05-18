@@ -178,12 +178,13 @@ class LMStudioModel(Model):
             tok["deprel"] = deprel
 
         # Tree-level repair: cycles + multi-root would crash the UD scorer.
-        # If the result isn't a valid rooted tree, fall the whole sentence
-        # back to right-branching (already used as the per-token default).
+        # When the model gives us per-token labels that don't form a valid
+        # tree, do the smallest possible mutation to make it valid (instead
+        # of wiping the whole sentence): keep the first head=0 as root,
+        # re-point extra roots to it, break cycles by re-pointing the
+        # highest-id cycle member to the root. Model deprels are preserved.
         if not _is_valid_tree(single):
-            for i, tok in enumerate(single):
-                tok["head"], tok["deprel"] = _right_branching_default(single, i)
-            n_fallback = len(single)
+            n_fallback += _repair_tree(single)
         return len(single), n_fallback
 
 
@@ -248,6 +249,77 @@ def _is_valid_tree(single: list) -> bool:
         else:
             return False  # cycle: walked n+1 steps without reaching root
     return True
+
+
+def _repair_tree(single: list) -> int:
+    """Mutate `single` in place so its heads form one rooted tree.
+
+    Preserves as much of the model's output as possible — only mutates the
+    head pointers that *have* to change to make the structure legal:
+
+    - **Multi-root** (>1 head=0): keep the first head=0 token, re-point the
+      others to it. Their deprels are kept (a deprel of "root" stays "root",
+      which is technically inconsistent with the new head, but lets the
+      scorer judge the label as the model produced it).
+    - **No root** (every token in a cycle): promote the last token to root
+      (head=0, deprel="root"); then break remaining cycles.
+    - **Cycles**: for each cycle, re-point the highest-id member to the root.
+      This is O(N) — a tarjan-style single-walk per unvisited node.
+
+    Returns the number of head pointers that were changed.
+    """
+    if not single:
+        return 0
+
+    n_changed = 0
+
+    # Step 1: ensure exactly one head=0
+    roots = [t for t in single if t["head"] == 0]
+    if not roots:
+        # Every node is in some cycle. Promote the last token; cycle breaking
+        # below handles the rest.
+        last = single[-1]
+        if last["head"] != 0:
+            last["head"] = 0
+            last["deprel"] = "root"
+            n_changed += 1
+    elif len(roots) > 1:
+        keep_id = roots[0]["id"]
+        for r in roots[1:]:
+            r["head"] = keep_id
+            n_changed += 1
+
+    root_id = next(t["id"] for t in single if t["head"] == 0)
+    by_id = {t["id"]: t for t in single}
+
+    # Step 2: detect & break cycles in one O(N) pass.
+    # state per id: 0 unvisited, 1 on current walk, 2 known to reach root.
+    state: dict[int, int] = {tid: 0 for tid in by_id}
+    for start_id in list(by_id.keys()):
+        if state[start_id] != 0:
+            continue
+        path: list[int] = []
+        cur = start_id
+        while True:
+            if cur == 0 or state.get(cur) == 2:
+                for x in path:
+                    state[x] = 2
+                break
+            if state.get(cur) == 1:
+                # cur is on the current walk → cycle whose members are
+                # path[path.index(cur):]
+                cycle = path[path.index(cur):]
+                target_id = max(cycle)
+                by_id[target_id]["head"] = root_id
+                n_changed += 1
+                for x in path:
+                    state[x] = 2
+                break
+            state[cur] = 1
+            path.append(cur)
+            cur = by_id[cur]["head"]
+
+    return n_changed
 
 
 def _format_sentence(single: list) -> str:
