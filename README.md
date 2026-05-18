@@ -1,10 +1,69 @@
 # NLP-LLM-SS2026 — `latinbench`
 
-A small bench for evaluating dependency parsers on the EvaLatin 2024 test data, with the goal of beating the published winners.
+A small bench for evaluating dependency parsers on the EvaLatin 2024 test data,
+with the goal of beating the published winners.
 
-Comes with two reference models (UDPipe 2, ÚFAL LatinPipe) and a template stub. Add a new model = write a 30-line Python file.
+Comes with two reference models (UDPipe 2, ÚFAL LatinPipe), a local-LLM
+template via LM Studio, and a stub for your own model. Add a new model =
+write a 30-line Python file.
 
-## Setup (one time)
+> Two ways to use this repo:
+> - **Just want to read what's been tried?** See [Explore the repo](#explore-the-repo) — nothing to install.
+> - **Want to run the bench or add a model?** See [Get started](#get-started).
+
+## Explore the repo
+
+The repo ships with the actual parse outputs of every system we've run, so you
+can inspect results without installing anything. Start here if you're just
+reading along.
+
+### Results so far
+
+LAS = labeled attachment score, CLAS = content-word LAS. Gold tokenization, so
+the system contribution is purely the parse. See
+[docs/01_findings.md](docs/01_findings.md) for the full breakdown (UAS,
+fallback rates, per-finding analysis).
+
+| split | system | LAS | CLAS |
+|---|---|---:|---:|
+| poetry | LatinPipe (1× checkpoint)        | **72.27** | **71.28** |
+| poetry | UDPipe 2 (`latin-perseus-ud-2.17`) | 61.19 | 59.90 |
+| poetry | qwen3-vl-8b-instruct-mlx (LM Studio) | 18.21 | 17.42 |
+| poetry | qwen3-0.6b-mlx (LM Studio)        |  2.67 |  2.72 |
+| prose  | LatinPipe (1× checkpoint)        | **75.06** | **70.90** |
+| prose  | UDPipe 2 (`latin-perseus-ud-2.17`) | 62.43 | 57.46 |
+| prose  | qwen3-vl-8b-instruct-mlx (LM Studio) | 17.80 | 14.53 |
+| prose  | qwen3-0.6b-mlx (LM Studio)        |  1.62 |  1.51 |
+
+The bar to beat is the published LatinPipe 7-model ensemble: ~78 LAS poetry,
+~83 LAS prose. The 1× checkpoint above is one model from that ensemble and is
+what we ship as the local reference.
+
+### Where to look
+
+- [docs/01_findings.md](docs/01_findings.md) — distilled research log: what
+  we tried, what worked, what's next.
+- [docs/00_task_explained.md](docs/00_task_explained.md) — plain-English
+  walkthrough of dependency parsing on Latin.
+- [notebooks/02_compare_models.ipynb](notebooks/02_compare_models.ipynb) — the
+  bench end-to-end: running the comparison, the LLM error analysis, the
+  0.6B → 8B scale-up. Renders directly on GitHub.
+- [predictions/](predictions/) — each system's actual parse output:
+  - `predictions/<system>/scores.json` — full CoNLL-18 scorer output
+    (UAS / LAS / CLAS / MLAS / BLEX, plus token/sent/word F1).
+  - `predictions/<system>/{poetry,prose}_pred.conllu` — the predicted UD
+    trees, sentence-by-sentence. Diff against `data/EvaLatin-2024-test/`
+    gold to see where each system goes wrong.
+- [src/latinbench/](src/latinbench/) — the small Python package: `Model` ABC
+  + `Bench` orchestrator (`core.py`), scorer wrapper (`score.py`), one
+  file per model in `models/`.
+
+## Get started
+
+Skip this section if you only want to read results. Everything below assumes
+you'll be running models locally.
+
+### Setup (one time)
 
 ```bash
 git clone https://github.com/Nicolas-Py/NLP-LLM-SS2026
@@ -24,15 +83,18 @@ third_party/latinpipe/.venv/bin/pip install -e .
 # into checkpoints/latinpipe-evalatin24-240520/
 ```
 
-Dependencies live in `pyproject.toml` — there's no `requirements.txt` (it would just duplicate). `pip install -e .` is the modern equivalent.
+Dependencies live in `pyproject.toml` — there's no `requirements.txt` (it
+would just duplicate). `pip install -e .` is the modern equivalent.
 
-## Running the existing models
+### Running the existing models
 
-The two reference models (`udpipe`, `latinpipe`) come pre-registered. Pick whichever interface you prefer:
+The two reference models (`udpipe`, `latinpipe`) come pre-registered. Pick
+whichever interface you prefer:
 
-### PyCharm (commands in the built-in Terminal)
+#### PyCharm (commands in the built-in Terminal)
 
-Open PyCharm's Terminal tab (**View → Tool Windows → Terminal**, or `⌥F12`) and paste:
+Open PyCharm's Terminal tab (**View → Tool Windows → Terminal**, or `⌥F12`)
+and paste:
 
 ```bash
 # One-time setup (skip if already done)
@@ -54,22 +116,25 @@ print(Bench().compare([MODELS['udpipe'], MODELS['latinpipe']]).to_string(index=F
 "
 ```
 
-To make PyCharm itself (its notebook runner, autocomplete, "Run" buttons) use this venv, point its project interpreter at `<repo>/.venv/bin/python` once.
+To make PyCharm itself (its notebook runner, autocomplete, "Run" buttons) use
+this venv, point its project interpreter at `<repo>/.venv/bin/python` once.
 
-### Jupyter Lab / Notebook
+#### Jupyter Lab / Notebook
 
 ```bash
 source .venv/bin/activate
 jupyter lab    # or jupyter notebook
 ```
 
-Open `notebooks/02_compare_models.ipynb` → Run All. Same flow as PyCharm; just a browser instead of the IDE.
+Open `notebooks/02_compare_models.ipynb` → Run All. Same flow as PyCharm;
+just a browser instead of the IDE.
 
-### VS Code / Cursor
+#### VS Code / Cursor
 
-Open the `NLP-LLM-SS2026/` folder, pick the kernel `<repo>/.venv/bin/python` in the top-right of the notebook, then Run All.
+Open the `NLP-LLM-SS2026/` folder, pick the kernel `<repo>/.venv/bin/python`
+in the top-right of the notebook, then Run All.
 
-### One-liner (no notebook)
+#### One-liner (no notebook)
 
 ```bash
 .venv/bin/python -c "
@@ -78,13 +143,15 @@ print(Bench().compare([MODELS['udpipe'], MODELS['latinpipe']]).to_string(index=F
 "
 ```
 
-## Forcing a fresh run
+### Forcing a fresh run
 
-Results cache at `predictions/<model_name>/scores.json`. To re-run:
+Results cache at `predictions/<model_name>/scores.json`. The committed
+`predictions/` tree means `Bench().run(...)` will short-circuit to cached
+scores on a fresh checkout. To genuinely re-run:
 
 ```bash
 # Re-run everything from scratch
-rm -rf predictions/
+rm -rf predictions/*/scores.json
 
 # Re-run just one model
 rm -rf predictions/latinpipe
@@ -93,21 +160,31 @@ rm -rf predictions/latinpipe
 .venv/bin/python -c "from latinbench import Bench, MODELS; Bench().run(MODELS['latinpipe'], force=True)"
 ```
 
-LatinPipe inference takes ~1–2 min per split on M1 CPU; UDPipe takes ~5–10 sec (REST API).
+LatinPipe inference takes ~1–2 min per split on M1 CPU; UDPipe takes
+~5–10 sec (REST API).
 
-## Common gotchas
+### Common gotchas
 
-- **`ModuleNotFoundError: No module named 'latinbench'`** — wrong Python interpreter. In PyCharm, fix via Settings → Interpreter. From the shell, `which python` should point at `<repo>/.venv/bin/python`.
-- **LatinPipe fails with TensorFlow import error** — the subprocess venv exists but `KERAS_BACKEND=torch` wasn't set. The bench sets it automatically; if you're invoking `latinpipe_evalatin24.py` by hand, prefix with `KERAS_BACKEND=torch`.
-- **LatinPipe checkpoint not found** — verify `checkpoints/latinpipe-evalatin24-240520/model.weights.h5` exists (≈663 MB). Re-download from the LINDAT link above.
+- **`ModuleNotFoundError: No module named 'latinbench'`** — wrong Python
+  interpreter. In PyCharm, fix via Settings → Interpreter. From the shell,
+  `which python` should point at `<repo>/.venv/bin/python`.
+- **LatinPipe fails with TensorFlow import error** — the subprocess venv
+  exists but `KERAS_BACKEND=torch` wasn't set. The bench sets it
+  automatically; if you're invoking `latinpipe_evalatin24.py` by hand,
+  prefix with `KERAS_BACKEND=torch`.
+- **LatinPipe checkpoint not found** — verify
+  `checkpoints/latinpipe-evalatin24-240520/model.weights.h5` exists
+  (≈663 MB). Re-download from the LINDAT link above.
 
-## Adding a new model
+### Adding a new model
 
 1. Open `src/latinbench/models/template.py`.
 2. Subclass `Model`, set `name`, implement `predict(test_path, out_path)`.
-3. Import it in `notebooks/02_compare_models.ipynb` and add it to the `bench.compare([...])` call.
+3. Import it in `notebooks/02_compare_models.ipynb` and add it to the
+   `bench.compare([...])` call.
 
-That's it. The bench handles writing predictions, calling the official scorer, parsing results, and plotting.
+That's it. The bench handles writing predictions, calling the official
+scorer, parsing results, and plotting.
 
 ## Layout
 
@@ -122,27 +199,14 @@ third_party/
 ├── scorer/             # CoNLL-18 official scorer
 └── latinpipe/          # vendored ÚFAL LatinPipe (no .git, no venv)
 checkpoints/            # gitignored; LatinPipe weights live here
-predictions/            # gitignored; per-model output
+predictions/            # tracked; one subdir per system (see Explore above)
 notebooks/              # 01_explore_data, 02_compare_models
-docs/00_task_explained.md
+docs/
+├── 00_task_explained.md   # what dependency parsing is, in plain English
+└── 01_findings.md         # research log: what's been tried, what worked
 ```
 
-## What's the task?
-
-See [docs/00_task_explained.md](docs/00_task_explained.md) for a plain-English walkthrough of dependency parsing on Latin.
-
-## Reference scores
-
-Run on the LINDAT REST API (UDPipe 2, model `latin-perseus-ud-2.17-251125`) and the released LatinPipe single-model checkpoint (`latinpipe-evalatin24-240520`). Both are pinned in code so these numbers stay reproducible.
-
-| split | system | LAS | CLAS |
-|---|---|---|---|
-| poetry | UDPipe | 61.19 | 59.90 |
-| poetry | LatinPipe (1× ckpt) | **72.27** | **71.28** |
-| prose | UDPipe | 62.43 | 57.46 |
-| prose | LatinPipe (1× ckpt) | **75.06** | **70.90** |
-
-The published LatinPipe paper used a 7-model ensemble — that's the bar to beat (~78 LAS poetry, ~83 LAS prose).
+## Reference details
 
 ### Trying a different UDPipe version
 
@@ -155,33 +219,40 @@ Bench().run(UdpipeModel('latin-perseus-ud-2.6-200830'))   # try an older one
 Bench().run(UdpipeModel(model_id='latest'))               # auto-pick newest
 ```
 
-Each id gets its own `predictions/<id>/` cache dir, so swapping versions doesn't clobber prior results.
+Each id gets its own `predictions/<id>/` cache dir, so swapping versions
+doesn't clobber prior results.
 
-## Trying a local LLM via LM Studio
+### Trying a local LLM via LM Studio
 
-A third reference model, `qwen3-lmstudio`, runs Qwen3-0.6B locally through
-[LM Studio](https://lmstudio.ai/) (MLX runtime on Apple Silicon) and parses each
-sentence with constrained JSON-schema structured output. It's intentionally a
-weak baseline (0.6B params on a hard structural task) — useful as a plumbing
-example for LLM-based parsing rather than for the leaderboard.
+Three LM Studio entries are registered (one 0.6B baseline, one 8B Qwen3-VL,
+one Gemma-3-12B). They share a single running LM Studio server; only one
+model is hot in memory at a time but LM Studio auto-swaps on request, so
+the same workflow handles all three.
 
 One-time setup:
 
 1. Install [LM Studio](https://lmstudio.ai/).
-2. **Discover** tab → search "Qwen3 0.6B MLX" → download `lmstudio-community/Qwen3-0.6B-MLX-4bit` (~400 MB).
-3. **Developer** tab → load the model → **Start Server** (defaults to port 1234).
-4. Recommended server settings: max parallel requests **8**, Flash Attention **on**, KV cache **q8_0**.
-5. Sanity check: `curl http://localhost:1234/v1/models` should list the loaded model.
+2. **Discover** tab → search "Qwen3 0.6B MLX" → download
+   `lmstudio-community/Qwen3-0.6B-MLX-4bit` (~400 MB). Repeat for any other
+   model you want to bench.
+3. **Developer** tab → load the model → **Start Server** (defaults to
+   port 1234).
+4. Recommended server settings: max parallel requests **8**, Flash Attention
+   **on**, KV cache **q8_0**.
+5. Sanity check: `curl http://localhost:1234/v1/models` should list the
+   loaded model.
 
-Run it:
+Run any registered LM Studio model:
 
 ```python
 from latinbench import Bench, MODELS
-Bench().run(MODELS["qwen3-lmstudio"])
+Bench().run(MODELS["qwen3-lmstudio"])          # 0.6B baseline
+Bench().run(MODELS["qwen3-vl-8b-lmstudio"])    # 8B
+Bench().run(MODELS["gemma-3-12b-lmstudio"])    # 12B, different family
 ```
 
-Swap to any other model loaded in LM Studio by constructing directly (pass the
-exact id LM Studio reports for `GET /v1/models`):
+Swap to any other model loaded in LM Studio by constructing directly (pass
+the exact id LM Studio reports for `GET /v1/models`):
 
 ```python
 from latinbench import Bench
@@ -190,8 +261,8 @@ Bench().run(LMStudioModel("qwen/qwen3-4b"))               # different size
 Bench().run(LMStudioModel("meta-llama/llama-3.2-3b"))     # different family
 ```
 
-Each `model_id` gets its own `predictions/<slug>/` cache dir (`:` and `/` are
-sanitized to `-`). Expect ~5 s per short sentence on a 0.6B model — full splits
-take many minutes; the bench caches per-model so re-runs are instant. A
-`<pred>.partial.json` sidecar updates as each sentence completes so a crash
-mid-predict resumes from where it left off.
+Each `model_id` gets its own `predictions/<slug>/` cache dir (`:` and `/`
+are sanitized to `-`). Expect ~5 s per short sentence on a 0.6B model — full
+splits take many minutes; the bench caches per-model so re-runs are instant.
+A `<pred>.partial.json` sidecar updates as each sentence completes so a
+crash mid-predict resumes from where it left off.
