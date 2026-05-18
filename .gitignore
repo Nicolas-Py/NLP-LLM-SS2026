@@ -15,10 +15,14 @@ venv/
 
 # Big artefacts that shouldn't be in git
 checkpoints/
-predictions/
 *.h5
 *.pt
 *.bin
+
+# Prediction outputs: track real experiments in git so the repo is
+# explorable without re-running, but skip noisy or in-progress artefacts.
+predictions/my_model/
+predictions/*/*.partial.json
 
 # Personal notes / specs (never committed)
 .specs/
