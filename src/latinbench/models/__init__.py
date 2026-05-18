@@ -15,10 +15,17 @@ def _make_registry() -> dict[str, Model]:
     # Lazy: instantiating LatinpipeModel checks for the checkpoint, which may
     # not exist yet. We keep the registry as factories so imports stay cheap
     # and errors only fire when the user actually runs that model.
+    #
+    # The LM Studio entries share one running LM Studio server; only one model
+    # is hot in memory at a time but LM Studio auto-swaps on request. Each
+    # entry gets its own predictions/<slug>/ cache dir, so results from
+    # earlier runs are preserved across model swaps.
     return {
         "udpipe": UdpipeModel(),
         "latinpipe": LatinpipeModel(),
-        "qwen3-lmstudio": LMStudioModel(),
+        "qwen3-lmstudio": LMStudioModel(),  # 0.6B baseline
+        "qwen3-vl-8b-lmstudio": LMStudioModel(model_id="qwen3-vl-8b-instruct-mlx"),
+        "gemma-3-12b-lmstudio": LMStudioModel(model_id="google/gemma-3-12b"),
     }
 
 
