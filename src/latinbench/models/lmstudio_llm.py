@@ -14,6 +14,7 @@ import requests
 
 from ..core import Model
 from ..data import gold_path
+from ..few_shot import ExamplePool
 
 
 SYSTEM_PROMPT = """\
@@ -42,13 +43,30 @@ class LMStudioModel(Model):
         num_workers: int = 8,
         max_tokens: int = 4096,
         temperature: float = 0.3,
+        k_shot: int = 0,
+        example_pool: "ExamplePool | None" = None,
+        shot_seed: int = 0,
     ) -> None:
         self.model_id = model_id
         self.host = host.rstrip("/")
         self.num_workers = num_workers
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self.name = model_id.replace(":", "-").replace("/", "-")
+        self.k_shot = k_shot
+        self.shot_seed = shot_seed
+        self._pool = example_pool if example_pool is not None else (
+            ExamplePool() if k_shot > 0 else None
+        )
+        self._demonstrations = (
+            self._pool.sample(k_shot, shot_seed) if self._pool else []
+        )
+
+        slug = model_id.replace(":", "-").replace("/", "-")
+        if k_shot > 0:
+            slug += f"-{k_shot}shot"
+            if shot_seed != 0:
+                slug += f"-s{shot_seed}"
+        self.name = slug
 
     def predict(self, test_path: Path, out_path: Path) -> None:
         sentences = conllu.parse(Path(test_path).read_text())

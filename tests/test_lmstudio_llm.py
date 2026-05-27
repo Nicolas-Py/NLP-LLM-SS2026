@@ -121,6 +121,65 @@ def test_host_is_trimmed_of_trailing_slash():
     assert m.host == "http://localhost:1234"
 
 
+# ---------- few-shot constructor / name slug ----------
+
+def test_name_slug_zero_shot_default_unchanged():
+    """Existing behaviour: k_shot defaults to 0, no slug suffix."""
+    assert LMStudioModel(model_id="qwen3-0.6b-mlx").name == "qwen3-0.6b-mlx"
+
+
+def test_name_slug_k_shot_2_appends_2shot():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    assert m.name == "qwen3-0.6b-mlx-2shot"
+
+
+def test_name_slug_k_shot_4_appends_4shot():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=4)
+    assert m.name == "qwen3-0.6b-mlx-4shot"
+
+
+def test_name_slug_non_default_seed_appends_seed_suffix():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, shot_seed=7)
+    assert m.name == "qwen3-0.6b-mlx-2shot-s7"
+
+
+def test_name_slug_default_seed_does_not_add_seed_suffix():
+    """Common case stays clean: shot_seed=0 → no -s0 suffix."""
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, shot_seed=0)
+    assert m.name == "qwen3-0.6b-mlx-2shot"
+
+
+def test_k_shot_zero_does_not_load_pool():
+    """Zero-shot construction must not touch the example file at all."""
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=0)
+    assert m._demonstrations == []
+    assert m._pool is None
+
+
+def test_k_shot_positive_uses_default_pool():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    assert m._pool is not None
+    assert len(m._demonstrations) == 2
+
+
+def test_k_shot_accepts_explicit_pool(tmp_path):
+    p = tmp_path / "custom.conllu"
+    p.write_text(
+        "# sent_id = c-1\n"
+        "1\tx\tx\tX\t_\t_\t0\troot\t_\t_\n"
+        "\n"
+        "# sent_id = c-2\n"
+        "1\ty\ty\tX\t_\t_\t0\troot\t_\t_\n"
+    )
+    from latinbench.few_shot import ExamplePool
+    pool = ExamplePool(p)
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, example_pool=pool)
+    assert m._pool is pool
+    assert len(m._demonstrations) == 2
+    ids = {s.metadata["sent_id"] for s in m._demonstrations}
+    assert ids == {"c-1", "c-2"}
+
+
 # ---------- _parse_one ----------
 
 THREE_TOKEN_SENT = (
