@@ -1,7 +1,8 @@
 # Design: Few-shot prompting for LM Studio LLMs in `latinbench`
 
 **Date:** 2026-05-27
-**Status:** Draft (pending user review of this written spec).
+**Status:** Implemented (0.6B + 8B 2-shot benched 2026-05-27; 12B run pending).
+Results in `docs/01_findings.md` §"Key findings" #7.
 **Related:** `2026-05-14-qwen3-ollama-llm-model-design.md` (introduces the LLM
 model class that this design extends); `docs/01_findings.md` §"Next experiments"
 item 2 (motivates this work).
@@ -114,17 +115,22 @@ Semantics:
 
 ## Bundled `few_shot_examples.conllu`
 
-6 hand-curated classical Latin sentences, each 5–10 single-word tokens, with
-all five UD columns filled (form, lemma, UPOS, feats, head, deprel). Coverage:
+6 hand-curated classical Latin sentences, each 3–4 single-word tokens, with
+all five UD columns filled (form, lemma, UPOS, feats, head, deprel). Short
+deliberately — context budget for k=2 stays under ~300 input tokens. Coverage
+(see the actual file for the exact tokens and full deprel set per sentence):
 
-| # | construction targeted              | deprels exercised                          |
-|---|------------------------------------|--------------------------------------------|
-| 1 | SVO with adjective modifier        | `nsubj`, `obj`, `amod`, `root`             |
-| 2 | Copular clause with predicate      | `cop`, `nsubj`, `root`                     |
-| 3 | Coordinated noun phrases           | `cc`, `conj`, `nmod`                       |
-| 4 | Verb + prepositional phrase        | `case`, `obl`, `det`                       |
-| 5 | Subordinate clause (relative or cum) | `acl:relcl` or `advcl`, `mark`           |
-| 6 | Participial / ablative absolute    | `advcl:pred`, `nmod`                       |
+| # | sent_id | text                                | construction targeted              | new deprels      |
+|---|---------|-------------------------------------|------------------------------------|------------------|
+| 1 | fs-001  | puella bonum librum legit           | SVO with adjective modifier        | `nsubj`, `obj`, `amod` |
+| 2 | fs-002  | Marcus poeta est                    | Copular clause with predicate noun | `cop`            |
+| 3 | fs-003  | pueri et puellae cantant            | Coordinated noun phrases           | `cc`, `conj`     |
+| 4 | fs-004  | agricola in agro laborat            | Verb + prepositional phrase        | `case`, `obl`    |
+| 5 | fs-005  | video puerum qui currit             | Relative clause                    | `acl:relcl`      |
+| 6 | fs-006  | Caesare interfecto bellum exarsit   | Ablative absolute                  | `advcl:pred`     |
+
+The "new deprels" column lists relations a given sentence adds beyond what
+earlier rows already cover — every sentence also uses `nsubj` and `root`.
 
 Constraints on the bundled file:
 

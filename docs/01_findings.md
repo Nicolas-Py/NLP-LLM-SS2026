@@ -118,8 +118,8 @@ mutate to make the sentence form a valid tree.
    result restores the prose > poetry gap** (20.2 vs 18.4) that
    trained parsers show but 0-shot 8B didn't, partly answering the open
    question below — suggests 0-shot 8B wasn't really doing Latin syntax;
-   2 demonstrations are enough to pull it into the data. See the spec at
-   [docs/superpowers/specs/2026-05-27-few-shot-llm-benchmark-design.md](superpowers/specs/2026-05-27-few-shot-llm-benchmark-design.md)
+   2 demonstrations are enough to pull it into the data. See the
+   [few-shot design spec](superpowers/specs/2026-05-27-few-shot-llm-benchmark-design.md)
    for methodology (disjoint hand-curated pool, static selection,
    deterministic seed, identical prompt scaffolding across k).
 
@@ -165,6 +165,10 @@ Ordered by expected impact ÷ effort:
   both show a clear poetry < prose gap (~3 LAS); the 8B shows essentially
   no gap (18.2 vs 17.8). Suggests it's not actually doing Latin syntax —
   more like applying a generic dependency prior that's split-agnostic.
+  *Partly answered by finding #7:* with 2-shot the 8B's prose > poetry
+  gap re-emerges (20.2 vs 18.4), matching the trained-parser pattern —
+  consistent with "0-shot 8B applies a generic prior; 2-shot pulls it
+  into the actual treebank."
 - **CLAS gap on prose.** The 8B prose UAS/LAS look comparable to poetry,
   but CLAS drops 3 points (17.4 → 14.5). Worth checking which content-word
   relations specifically degrade.
