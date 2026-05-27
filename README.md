@@ -26,14 +26,18 @@ fallback rates, per-finding analysis).
 
 | split | system | LAS | CLAS |
 |---|---|---:|---:|
-| poetry | LatinPipe (1× checkpoint)        | **72.27** | **71.28** |
-| poetry | UDPipe 2 (`latin-perseus-ud-2.17`) | 61.19 | 59.90 |
-| poetry | qwen3-vl-8b-instruct-mlx (LM Studio) | 18.21 | 17.42 |
-| poetry | qwen3-0.6b-mlx (LM Studio)        |  2.67 |  2.72 |
-| prose  | LatinPipe (1× checkpoint)        | **75.06** | **70.90** |
-| prose  | UDPipe 2 (`latin-perseus-ud-2.17`) | 62.43 | 57.46 |
-| prose  | qwen3-vl-8b-instruct-mlx (LM Studio) | 17.80 | 14.53 |
-| prose  | qwen3-0.6b-mlx (LM Studio)        |  1.62 |  1.51 |
+| poetry | LatinPipe (1× checkpoint)                       | **72.27** | **71.28** |
+| poetry | UDPipe 2 (`latin-perseus-ud-2.17`)              | 61.19 | 59.90 |
+| poetry | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot)    | 18.41 | 17.43 |
+| poetry | qwen3-vl-8b-instruct-mlx (LM Studio, 0-shot)    | 18.21 | 17.42 |
+| poetry | qwen3-0.6b-mlx (LM Studio, 0-shot)              |  2.67 |  2.72 |
+| poetry | qwen3-0.6b-mlx (LM Studio, 2-shot)              |  2.06 |  2.23 |
+| prose  | LatinPipe (1× checkpoint)                       | **75.06** | **70.90** |
+| prose  | UDPipe 2 (`latin-perseus-ud-2.17`)              | 62.43 | 57.46 |
+| prose  | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot)    | 20.16 | 16.68 |
+| prose  | qwen3-vl-8b-instruct-mlx (LM Studio, 0-shot)    | 17.80 | 14.53 |
+| prose  | qwen3-0.6b-mlx (LM Studio, 0-shot)              |  1.62 |  1.51 |
+| prose  | qwen3-0.6b-mlx (LM Studio, 2-shot)              |  1.32 |  1.52 |
 
 The bar to beat is the published LatinPipe 7-model ensemble: ~78 LAS poetry,
 ~83 LAS prose. The 1× checkpoint above is one model from that ensemble and is
@@ -266,3 +270,26 @@ are sanitized to `-`). Expect ~5 s per short sentence on a 0.6B model — full
 splits take many minutes; the bench caches per-model so re-runs are instant.
 A `<pred>.partial.json` sidecar updates as each sentence completes so a
 crash mid-predict resumes from where it left off.
+
+#### Few-shot prompting
+
+Pass `k_shot=N` to inject `N` hand-curated Latin demonstration sentences
+as chat history before the target sentence (default `k_shot=0` is the
+zero-shot path above). Demonstrations are sampled deterministically from
+the bundled
+[`src/latinbench/few_shot_examples.conllu`](src/latinbench/few_shot_examples.conllu)
+pool — disjoint from the EvaLatin test corpus by construction.
+
+```python
+from latinbench import Bench
+from latinbench.models.lmstudio_llm import LMStudioModel
+Bench().run(LMStudioModel("qwen3-vl-8b-instruct-mlx", k_shot=2))
+```
+
+The cache slug auto-suffixes with `-{k}shot` (e.g.
+`predictions/qwen3-vl-8b-instruct-mlx-2shot/`), so 0-shot and k-shot
+results coexist and can be compared in the same `Bench.compare(...)`
+DataFrame. Pass `example_pool=ExamplePool(my_conllu)` to swap in your
+own pool; `shot_seed=N` to pick a different sample from the same pool.
+Methodology, results, and the 0-shot vs 2-shot comparison live in
+[docs/01_findings.md](docs/01_findings.md) key finding #7.

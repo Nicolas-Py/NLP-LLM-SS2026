@@ -5,7 +5,7 @@ intact so we can trace what we tried and what it cost. Detailed per-experiment
 analysis lives in [notebooks/02_compare_models.ipynb](../notebooks/02_compare_models.ipynb);
 this doc is the distilled version.
 
-_Last updated: 2026-05-18._
+_Last updated: 2026-05-27._
 
 ## Goal
 
@@ -53,12 +53,16 @@ mutate to make the sentence form a valid tree.
 |---|---|---:|---:|---:|---|
 | poetry | LatinPipe | 78.4 | **72.3** | 71.3 | — |
 | poetry | UDPipe 2 | 69.0 | 61.2 | 59.9 | — |
-| poetry | qwen3-vl-8b-instruct-mlx | 35.4 | **18.2** | 17.4 | 4.2% tok, 29% of sents |
-| poetry | qwen3-0.6b-mlx | 9.6 | 2.7 | 2.7 | 42.3% tok, 44% of sents |
+| poetry | qwen3-vl-8b-instruct-mlx          | 35.4 | **18.2** | 17.4 | 4.2% tok, 29% of sents |
+| poetry | qwen3-vl-8b-instruct-mlx (2-shot) | 35.9 | 18.4 | 17.4 | 9.5% tok, 32% of sents |
+| poetry | qwen3-0.6b-mlx                    |  9.6 | 2.7 | 2.7 | 42.3% tok, 44% of sents |
+| poetry | qwen3-0.6b-mlx (2-shot)           | 19.5 | 2.1 | 2.2 | 57.9% tok, 74% of sents |
 | prose  | LatinPipe | 80.4 | **75.1** | 70.9 | — |
 | prose  | UDPipe 2 | 69.3 | 62.4 | 57.5 | — |
-| prose  | qwen3-vl-8b-instruct-mlx | 33.3 | **17.8** | 14.5 | 3.4% tok, 41% of sents |
-| prose  | qwen3-0.6b-mlx | 7.6 | 1.6 | 1.5 | 40.1% tok, 53% of sents |
+| prose  | qwen3-vl-8b-instruct-mlx          | 33.3 | 17.8 | 14.5 | 3.4% tok, 41% of sents |
+| prose  | qwen3-vl-8b-instruct-mlx (2-shot) | 36.5 | **20.2** | 16.7 | 3.8% tok, 38% of sents |
+| prose  | qwen3-0.6b-mlx                    |  7.6 | 1.6 | 1.5 | 40.1% tok, 53% of sents |
+| prose  | qwen3-0.6b-mlx (2-shot)           | 23.5 | 1.3 | 1.5 | 59.7% tok, 86% of sents |
 
 ## Key findings
 
@@ -102,6 +106,23 @@ mutate to make the sentence form a valid tree.
    accuracy is 5–25% across the board; no relation type is "easy". For
    comparison LatinPipe sits at 60–90% per relation.
 
+7. **Few-shot (2-shot) helps the 8B on prose (+2.4 LAS) but not poetry;
+   hurts the 0.6B on both splits.** Two hand-curated Latin sentences with
+   full UD annotations injected as chat history (user/assistant turns
+   before the target). The 8B's prose LAS climbed 17.80 → 20.16 and CLAS
+   14.53 → 16.68; poetry barely moved (LAS +0.20). The 0.6B's LAS dropped
+   on both splits (2.67 → 2.06 poetry; 1.62 → 1.32 prose) while UAS jumped
+   sharply (9.6 → 19.5, 7.6 → 23.5) — same UAS/LAS tradeoff documented in
+   key finding #4: more invalid output → more minimal-repair → right-
+   branching prior boosts UAS while erasing model labels. **The 8B prose
+   result restores the prose > poetry gap** (20.2 vs 18.4) that
+   trained parsers show but 0-shot 8B didn't, partly answering the open
+   question below — suggests 0-shot 8B wasn't really doing Latin syntax;
+   2 demonstrations are enough to pull it into the data. See the
+   [few-shot design spec](superpowers/specs/2026-05-27-few-shot-llm-benchmark-design.md)
+   for methodology (disjoint hand-curated pool, static selection,
+   deterministic seed, identical prompt scaffolding across k).
+
 ## Engineering wins
 
 - **Minimal tree repair** (commit `9c230c9`) preserves the model's
@@ -125,10 +146,11 @@ Ordered by expected impact ÷ effort:
 1. **Gemma-3-12B (cross-family check).** Registry entry already exists
    (`gemma-3-12b-lmstudio`); the notebook has a stub cell. Tells us
    whether the 8B result is Qwen-specific or a general scale effect.
-2. **Few-shot Latin parses in the prompt.** The current prompt has one
-   English-style example. Replacing it with 2–3 real Latin sentences
-   with their UD trees should help on Latin-specific relations
-   (`amod`, `conj`, `case`).
+2. ~~**Few-shot Latin parses in the prompt.**~~ Done 2026-05-27 (key
+   finding #7). 2-shot helps the 8B on prose, flat on poetry, hurts the
+   0.6B. Worth following up: scaling k (4, 8) and multi-seed variance
+   for the 8B — the +2.4 LAS prose gain is the kind of effect size that
+   could vary meaningfully with example choice.
 3. **Chu-Liu-Edmonds over candidate heads.** `ufal.chu-liu-edmonds` is
    already installed. Have the LLM score each token-pair candidacy
    instead of committing to one head, then extract the maximum-spanning
@@ -143,6 +165,10 @@ Ordered by expected impact ÷ effort:
   both show a clear poetry < prose gap (~3 LAS); the 8B shows essentially
   no gap (18.2 vs 17.8). Suggests it's not actually doing Latin syntax —
   more like applying a generic dependency prior that's split-agnostic.
+  *Partly answered by finding #7:* with 2-shot the 8B's prose > poetry
+  gap re-emerges (20.2 vs 18.4), matching the trained-parser pattern —
+  consistent with "0-shot 8B applies a generic prior; 2-shot pulls it
+  into the actual treebank."
 - **CLAS gap on prose.** The 8B prose UAS/LAS look comparable to poetry,
   but CLAS drops 3 points (17.4 → 14.5). Worth checking which content-word
   relations specifically degrade.
@@ -159,6 +185,11 @@ Ordered by expected impact ÷ effort:
 
 ## Changelog
 
+- **2026-05-27** — Few-shot (2-shot) hand-curated Latin demonstrations
+  injected as chat history. 0.6B LAS hurt on both splits; 8B LAS flat
+  on poetry (+0.20), +2.36 on prose. Restores 8B's prose > poetry gap.
+  Implementation: `LMStudioModel(k_shot=2, ...)`. Predictions cached at
+  `predictions/<slug>-2shot/`. 12B run pending.
 - **2026-05-18** — Re-ran 0.6B under the new minimal repair for
   apples-to-apples comparison with 8B (LAS 2.7 / 1.6). Pre-repair
   predictions archived at `predictions/qwen3-0.6b-mlx.pre-repair/`.
