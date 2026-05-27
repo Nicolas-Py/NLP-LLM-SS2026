@@ -1,0 +1,41 @@
+# sent_id = fs-001
+# text = puella bonum librum legit
+1	puella	puella	NOUN	A1	Case=Nom|Gender=Fem|InflClass=IndEurA|Number=Sing	4	nsubj	_	_
+2	bonum	bonus	ADJ	C1	Case=Acc|Degree=Pos|Gender=Masc|InflClass=IndEurO|Number=Sing	3	amod	_	_
+3	librum	liber	NOUN	A2	Case=Acc|Gender=Masc|InflClass=IndEurO|Number=Sing	4	obj	_	_
+4	legit	lego	VERB	B3	Aspect=Imp|InflClass=LatX|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act	0	root	_	_
+
+# sent_id = fs-002
+# text = Marcus poeta est
+1	Marcus	marcus	PROPN	A2	Case=Nom|Gender=Masc|InflClass=IndEurO|Number=Sing	2	nsubj	_	_
+2	poeta	poeta	NOUN	A1	Case=Nom|Gender=Masc|InflClass=IndEurA|Number=Sing	0	root	_	_
+3	est	sum	AUX	Z3	Aspect=Imp|InflClass=LatAnom|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin	2	cop	_	_
+
+# sent_id = fs-003
+# text = pueri et puellae cantant
+1	pueri	puer	NOUN	A2	Case=Nom|Gender=Masc|InflClass=IndEurO|Number=Plur	4	nsubj	_	_
+2	et	et	CCONJ	S	_	3	cc	_	_
+3	puellae	puella	NOUN	A1	Case=Nom|Gender=Fem|InflClass=IndEurA|Number=Plur	1	conj	_	_
+4	cantant	canto	VERB	B1	Aspect=Imp|InflClass=LatA|Mood=Ind|Number=Plur|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act	0	root	_	_
+
+# sent_id = fs-004
+# text = agricola in agro laborat
+1	agricola	agricola	NOUN	A1	Case=Nom|Gender=Masc|InflClass=IndEurA|Number=Sing	4	nsubj	_	_
+2	in	in	ADP	R	_	3	case	_	_
+3	agro	ager	NOUN	A2	Case=Abl|Gender=Masc|InflClass=IndEurO|Number=Sing	4	obl	_	_
+4	laborat	laboro	VERB	B1	Aspect=Imp|InflClass=LatA|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act	0	root	_	_
+
+# sent_id = fs-005
+# text = video puerum qui currit
+1	video	video	VERB	B2	Aspect=Imp|InflClass=LatE|Mood=Ind|Number=Sing|Person=1|Tense=Pres|VerbForm=Fin|Voice=Act	0	root	_	_
+2	puerum	puer	NOUN	A2	Case=Acc|Gender=Masc|InflClass=IndEurO|Number=Sing	1	obj	_	_
+3	qui	qui	PRON	I	Case=Nom|Gender=Masc|InflClass=LatPron|Number=Sing|PronType=Rel	4	nsubj	_	_
+4	currit	curro	VERB	B3	Aspect=Imp|InflClass=LatX|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act	2	acl:relcl	_	_
+
+# sent_id = fs-006
+# text = Caesare interfecto bellum exarsit
+1	Caesare	caesar	PROPN	A3	Case=Abl|Gender=Masc|InflClass=IndEurX|Number=Sing	2	nsubj	_	_
+2	interfecto	interficio	VERB	Y3	Aspect=Perf|Case=Abl|Degree=Pos|Gender=Masc|InflClass=LatX|InflClass[nominal]=IndEurO|Number=Sing|VerbForm=Part|Voice=Pass	4	advcl:pred	_	_
+3	bellum	bellum	NOUN	A2	Case=Nom|Gender=Neut|InflClass=IndEurO|Number=Sing	4	nsubj	_	_
+4	exarsit	exardesco	VERB	B3	Aspect=Perf|InflClass=LatX|Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin|Voice=Act	0	root	_	_
+

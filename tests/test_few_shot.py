@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
+import conllu
 
-from latinbench.few_shot import ExamplePool
+from latinbench.few_shot import DEFAULT_EXAMPLES_PATH, ExamplePool
+from latinbench.models.lmstudio_llm import DEPREL_LABELS
 
 
 _TWO_SENT_POOL = (
@@ -77,3 +79,53 @@ def test_sample_returns_k_distinct_sentences(tmp_path):
     sampled = pool.sample(2, seed=0)
     sent_ids = [s.metadata["sent_id"] for s in sampled]
     assert len(set(sent_ids)) == 2  # sampling is without replacement
+
+
+def test_default_pool_loads():
+    pool = ExamplePool()
+    assert len(pool) >= 6
+
+
+def test_default_pool_every_token_has_head_and_deprel():
+    pool = ExamplePool()
+    for sent in pool._sentences:
+        for tok in sent:
+            if isinstance(tok["id"], int):
+                assert isinstance(tok["head"], int), (
+                    f"sent {sent.metadata.get('sent_id')} token id={tok['id']} "
+                    f"head not int: {tok['head']!r}"
+                )
+                assert isinstance(tok["deprel"], str) and tok["deprel"], (
+                    f"sent {sent.metadata.get('sent_id')} token id={tok['id']} "
+                    f"missing deprel"
+                )
+
+
+def test_default_pool_deprels_are_in_evalatin_label_set():
+    """Every deprel used in the bundled pool must be in the EvaLatin gold
+    label inventory. Otherwise the JSON-schema enum in lmstudio_llm.py would
+    forbid the model from ever emitting it, which makes the demonstration
+    inconsistent with what the model can produce at test time."""
+    pool = ExamplePool()
+    used = {
+        tok["deprel"]
+        for sent in pool._sentences
+        for tok in sent
+        if isinstance(tok["id"], int)
+    }
+    extra = used - set(DEPREL_LABELS)
+    assert not extra, (
+        f"pool uses deprels not in EvaLatin gold inventory: {sorted(extra)}"
+    )
+
+
+def test_default_pool_has_no_multi_word_tokens():
+    """Demonstrations should not contain MWT rows (e.g. `2-3 puellaeque ...`),
+    since the prompt's user-message formatter ignores those and the assistant
+    JSON output never references them."""
+    pool = ExamplePool()
+    for sent in pool._sentences:
+        for tok in sent:
+            assert isinstance(tok["id"], int), (
+                f"sent {sent.metadata.get('sent_id')} has MWT row id={tok['id']!r}"
+            )
