@@ -729,3 +729,32 @@ def test_call_llm_posts_few_shot_body_with_chat_history():
     # Schema still applies to the final completion only
     assert body["response_format"]["type"] == "json_schema"
     assert body["response_format"]["json_schema"]["strict"] is True
+
+
+def test_predict_with_k_shot_2_uses_few_shot_messages(tmp_path):
+    """Full path: LMStudioModel(k_shot=2).predict() sends 6-message chat turns
+    (system + 2 user/assistant demo pairs + target user) to the HTTP layer."""
+    test_file = tmp_path / "test.conllu"
+    test_file.write_text(
+        "# sent_id = s1\n"
+        "# text = Marcus amat\n"
+        "1\tMarcus\tmarcus\tPROPN\t_\tCase=Nom\t_\t_\t_\t_\n"
+        "2\tamat\tamo\tVERB\t_\tMood=Ind\t_\t_\t_\t_\n"
+    )
+    out_file = tmp_path / "pred.conllu"
+    payload = {"tokens": [
+        {"id": 1, "head": 2, "deprel": "nsubj"},
+        {"id": 2, "head": 0, "deprel": "root"},
+    ]}
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    m.num_workers = 1
+    with patch("requests.post", return_value=_lmstudio_response(payload)) as mock_post:
+        m.predict(test_file, out_file)
+
+    # The single HTTP call carries the few-shot chat history
+    assert mock_post.call_count == 1
+    body = mock_post.call_args.kwargs["json"]
+    roles = [msg["role"] for msg in body["messages"]]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "user"]
+    # Final assistant generation is still schema-constrained
+    assert body["response_format"]["json_schema"]["strict"] is True

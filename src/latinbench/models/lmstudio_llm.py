@@ -44,7 +44,7 @@ class LMStudioModel(Model):
         max_tokens: int = 4096,
         temperature: float = 0.3,
         k_shot: int = 0,
-        example_pool: "ExamplePool | None" = None,
+        example_pool: ExamplePool | None = None,
         shot_seed: int = 0,
     ) -> None:
         self.model_id = model_id
