@@ -635,3 +635,97 @@ def test_predict_resumes_from_partial_file(tmp_path, capsys):
     assert not partial_file.exists()
     out = capsys.readouterr().out
     assert "resuming" in out
+
+
+# ---------- _format_assistant_response ----------
+
+def test_format_assistant_response_emits_compact_json():
+    from latinbench.models.lmstudio_llm import _format_assistant_response
+
+    sent = conllu.parse(
+        "# sent_id = t\n"
+        "1\tMarcus\tmarcus\tPROPN\t_\t_\t2\tnsubj\t_\t_\n"
+        "2\tpoeta\tpoeta\tNOUN\t_\t_\t0\troot\t_\t_\n"
+        "3\test\tsum\tAUX\t_\t_\t2\tcop\t_\t_\n"
+    )[0]
+    single = [t for t in sent if isinstance(t["id"], int)]
+    out = _format_assistant_response(single)
+    parsed = json.loads(out)
+    assert parsed == {"tokens": [
+        {"id": 1, "head": 2, "deprel": "nsubj"},
+        {"id": 2, "head": 0, "deprel": "root"},
+        {"id": 3, "head": 2, "deprel": "cop"},
+    ]}
+
+
+# ---------- _build_messages (few-shot chat history) ----------
+
+def _target_single():
+    return [
+        {"id": 1, "form": "a", "lemma": "_", "upos": "X", "feats": None},
+        {"id": 2, "form": "b", "lemma": "_", "upos": "X", "feats": None},
+    ]
+
+
+def test_build_messages_zero_shot_is_system_then_user():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx")  # k_shot=0
+    messages = m._build_messages(_target_single())
+    assert [msg["role"] for msg in messages] == ["system", "user"]
+    assert messages[0]["content"] == SYSTEM_PROMPT
+
+
+def test_build_messages_k_shot_2_interleaves_user_assistant_demos():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    messages = m._build_messages(_target_single())
+    # system + (user, assistant) × 2 demos + final user = 6 messages
+    assert [msg["role"] for msg in messages] == [
+        "system", "user", "assistant", "user", "assistant", "user",
+    ]
+    # System prompt unchanged
+    assert messages[0]["content"] == SYSTEM_PROMPT
+    # Demonstration assistant turns parse as JSON with a "tokens" key
+    for demo_idx in (2, 4):
+        parsed = json.loads(messages[demo_idx]["content"])
+        assert "tokens" in parsed and isinstance(parsed["tokens"], list)
+        for entry in parsed["tokens"]:
+            assert set(entry.keys()) == {"id", "head", "deprel"}
+    # Target sentence is the LAST user message and uses the same formatter
+    # as demonstration user messages (no special framing).
+    final_user = messages[-1]["content"]
+    assert "2 tokens" in final_user
+    assert "[1, 2]" in final_user
+
+
+def test_build_messages_k_shot_4_has_4_demo_pairs():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=4)
+    messages = m._build_messages(_target_single())
+    roles = [msg["role"] for msg in messages]
+    # system + 4 × (user, assistant) + user = 10 messages
+    assert len(roles) == 10
+    assert roles[0] == "system"
+    assert roles[-1] == "user"
+    # Interleaving: positions 1,3,5,7 are user demos; 2,4,6,8 are assistant demos
+    for i in (1, 3, 5, 7):
+        assert roles[i] == "user"
+    for i in (2, 4, 6, 8):
+        assert roles[i] == "assistant"
+
+
+def test_call_llm_posts_few_shot_body_with_chat_history():
+    """End-to-end: the HTTP body for a k=2 call has the expected interleaved
+    chat history, and the final assistant generation still gets the JSON
+    schema constraint applied."""
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    payload = {"tokens": [
+        {"id": 1, "head": 2, "deprel": "nsubj"},
+        {"id": 2, "head": 0, "deprel": "root"},
+    ]}
+    with patch("requests.post", return_value=_lmstudio_response(payload)) as mock_post:
+        m._call_llm(_target_single())
+
+    body = mock_post.call_args.kwargs["json"]
+    roles = [msg["role"] for msg in body["messages"]]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "user"]
+    # Schema still applies to the final completion only
+    assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["strict"] is True

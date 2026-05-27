@@ -140,13 +140,31 @@ class LMStudioModel(Model):
             f"{fallback_sents} sentences"
         )
 
+    def _build_messages(self, single: list) -> list[dict]:
+        """Build the chat messages list: system + k demo pairs + target user."""
+        messages: list[dict] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+        for demo in self._demonstrations:
+            demo_single = [t for t in demo if isinstance(t["id"], int)]
+            messages.append({
+                "role": "user",
+                "content": _format_user_message(demo_single),
+            })
+            messages.append({
+                "role": "assistant",
+                "content": _format_assistant_response(demo_single),
+            })
+        messages.append({
+            "role": "user",
+            "content": _format_user_message(single),
+        })
+        return messages
+
     def _call_llm(self, single: list) -> dict:
         body = {
             "model": self.model_id,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _format_user_message(single)},
-            ],
+            "messages": self._build_messages(single),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -371,3 +389,15 @@ def _format_user_message(single: list) -> str:
         f"Output a JSON object with a \"tokens\" array of {len(single)} entries, "
         f"one per row above, preserving the ids."
     )
+
+
+def _format_assistant_response(single: list) -> str:
+    """Render a gold-annotated sentence as the JSON assistant response it
+    represents — i.e. exactly what we want a few-shot demonstration's
+    assistant turn to contain.
+    """
+    tokens = [
+        {"id": t["id"], "head": t["head"], "deprel": t["deprel"]}
+        for t in single
+    ]
+    return json.dumps({"tokens": tokens}, ensure_ascii=False)
