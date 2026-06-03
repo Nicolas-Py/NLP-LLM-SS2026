@@ -57,12 +57,14 @@ mutate to make the sentence form a valid tree.
 | poetry | qwen3-vl-8b-instruct-mlx (2-shot) | 35.9 | 18.4 | 17.4 | 9.5% tok, 32% of sents |
 | poetry | qwen3-0.6b-mlx                    |  9.6 | 2.7 | 2.7 | 42.3% tok, 44% of sents |
 | poetry | qwen3-0.6b-mlx (2-shot)           | 19.5 | 2.1 | 2.2 | 57.9% tok, 74% of sents |
+| poetry | qwen3-0.6b-mlx (2-shot Perseus)   | 11.6 | 2.3 | 2.4 | 23.2% tok, 72% of sents |
 | prose  | LatinPipe | 80.4 | **75.1** | 70.9 | — |
 | prose  | UDPipe 2 | 69.3 | 62.4 | 57.5 | — |
 | prose  | qwen3-vl-8b-instruct-mlx          | 33.3 | 17.8 | 14.5 | 3.4% tok, 41% of sents |
 | prose  | qwen3-vl-8b-instruct-mlx (2-shot) | 36.5 | **20.2** | 16.7 | 3.8% tok, 38% of sents |
 | prose  | qwen3-0.6b-mlx                    |  7.6 | 1.6 | 1.5 | 40.1% tok, 53% of sents |
 | prose  | qwen3-0.6b-mlx (2-shot)           | 23.5 | 1.3 | 1.5 | 59.7% tok, 86% of sents |
+| prose  | qwen3-0.6b-mlx (2-shot Perseus)   | 12.8 | 2.0 | 2.1 | 20.8% tok, 63% of sents |
 
 ## Key findings
 
@@ -123,15 +125,22 @@ mutate to make the sentence form a valid tree.
    for methodology (disjoint hand-curated pool, static selection,
    deterministic seed, identical prompt scaffolding across k).
 
-8. **Few-shot from training data (Perseus) — set up, run pending.** Same k=2
-   chat-history setup as #7, but the two demonstrations are drawn from real
-   UD_Latin-Perseus training sentences (punctuation-stripped to match the
-   punct-free EvaLatin format) instead of the hand-curated toy pool — to test
-   whether genuine treebank examples beat idealized ones. Pool:
-   `src/latinbench/few_shot_examples_perseus.conllu` (6 sentences). Runs cache to
-   `predictions/<model>-2shot-perseus/`, beside the hand-curated `-2shot`.
-   **Results: pending an LM Studio run** (0.6B + 8B, same as #7). Methodology in
-   the [training-data pool spec](superpowers/specs/2026-06-03-few-shot-training-data-pool-design.md).
+8. **Few-shot from training data (Perseus) beats the hand-curated pool on the
+   0.6B; 8B not yet run.** Same k=2 setup as #7, but the two demonstrations are
+   real UD_Latin-Perseus training sentences (punctuation-stripped) instead of
+   hand-curated toy ones (run 2026-06-03; see the 0.6B `(2-shot Perseus)` rows in
+   the results table above). Perseus beats hand-curated on LAS and CLAS on both
+   splits (poetry LAS 2.31 vs 2.06, prose 1.99 vs 1.32), and unlike the
+   hand-curated pool it **helps prose** over zero-shot (1.99 vs 1.62). Its bigger
+   win is tree validity: token-fallback drops to 23.2% / 20.8% (poetry/prose) vs
+   the hand-curated pool's 57.9% / 59.7% — real treebank demos make even the weak
+   model emit far more valid trees. (UAS is correspondingly lower, 11.6 / 12.8 vs
+   19.5 / 23.5 — the fallback-driven UAS/LAS tradeoff of #4.) Absolute LAS is
+   still ~2; the **8B — the model that actually benefits from few-shot (#7) — is
+   not run yet** (only the 0.6B was loaded). Pool:
+   `src/latinbench/few_shot_examples_perseus.conllu` (6 sentences); cache
+   `predictions/<model>-2shot-perseus/`. Methodology in the
+   [training-data pool spec](superpowers/specs/2026-06-03-few-shot-training-data-pool-design.md).
 
 ## Engineering wins
 
@@ -199,7 +208,9 @@ Ordered by expected impact ÷ effort:
 - **2026-06-03** — Few-shot demonstrations sourced from UD_Latin-Perseus
   training data (punctuation-stripped) as an alternative to the hand-curated
   pool. `ExamplePool(path=…_perseus.conllu)` + a `-2shot-perseus` cache slug so
-  it sits beside the hand-curated run. Numbers pending an LM Studio run.
+  it sits beside the hand-curated run. 0.6B run: Perseus beats hand-curated on
+  LAS/CLAS both splits and cuts token-fallback to ~21–23% (hand-curated ~58–60%);
+  8B run still pending (not loaded). See key finding #8.
 - **2026-05-27** — Few-shot (2-shot) hand-curated Latin demonstrations
   injected as chat history. 0.6B LAS hurt on both splits; 8B LAS flat
   on poetry (+0.20), +2.36 on prose. Restores 8B's prose > poetry gap.
