@@ -3,8 +3,10 @@ from __future__ import annotations
 import pytest
 import conllu
 
-from latinbench.few_shot import DEFAULT_EXAMPLES_PATH, ExamplePool
+from latinbench.few_shot import DEFAULT_EXAMPLES_PATH, ExamplePool, _derive_tag
 from latinbench.models.lmstudio_llm import DEPREL_LABELS
+
+PERSEUS_POOL_PATH = DEFAULT_EXAMPLES_PATH.parent / "few_shot_examples_perseus.conllu"
 
 
 _TWO_SENT_POOL = (
@@ -129,3 +131,57 @@ def test_default_pool_has_no_multi_word_tokens():
             assert isinstance(tok["id"], int), (
                 f"sent {sent.metadata.get('sent_id')} has MWT row id={tok['id']!r}"
             )
+
+
+# ---------- pool `tag` (prediction-cache slug isolation) ----------
+
+def test_default_pool_tag_is_empty():
+    assert ExamplePool().tag == ""
+
+
+def test_perseus_pool_tag_is_perseus():
+    assert ExamplePool(PERSEUS_POOL_PATH).tag == "perseus"
+
+
+def test_explicit_tag_overrides_filename(tmp_path):
+    p = tmp_path / "few_shot_examples_perseus.conllu"
+    p.write_text(_TWO_SENT_POOL)
+    assert ExamplePool(p, tag="custom").tag == "custom"
+
+
+def test_arbitrary_pool_tag_falls_back_to_stem(tmp_path):
+    p = tmp_path / "mypool.conllu"
+    p.write_text(_TWO_SENT_POOL)
+    assert ExamplePool(p).tag == "mypool"
+
+
+def test_derive_tag_default_and_prefixed():
+    assert _derive_tag(DEFAULT_EXAMPLES_PATH) == ""
+    assert _derive_tag(
+        DEFAULT_EXAMPLES_PATH.parent / "few_shot_examples_perseus.conllu"
+    ) == "perseus"
+
+
+# ---------- Perseus training-data pool (committed artifact) ----------
+# Mirrors the hand-curated pool's sanity checks — only the example source differs.
+
+def test_perseus_pool_loads():
+    assert len(ExamplePool(PERSEUS_POOL_PATH)) >= 6
+
+
+def test_perseus_pool_every_token_has_head_and_deprel():
+    pool = ExamplePool(PERSEUS_POOL_PATH)
+    for sent in pool._sentences:
+        for tok in sent:
+            assert isinstance(tok["id"], int), "Perseus pool must contain no MWT rows"
+            assert isinstance(tok["head"], int)
+            assert isinstance(tok["deprel"], str) and tok["deprel"]
+
+
+def test_perseus_pool_deprels_in_evalatin_enum():
+    """Every demo deprel must be in the EvaLatin gold enum (same invariant as the
+    hand-curated pool) — which is why punctuation is stripped (punct ∉ enum)."""
+    pool = ExamplePool(PERSEUS_POOL_PATH)
+    used = {tok["deprel"] for sent in pool._sentences for tok in sent}
+    extra = used - set(DEPREL_LABELS)
+    assert not extra, f"Perseus pool uses non-EvaLatin deprels: {sorted(extra)}"

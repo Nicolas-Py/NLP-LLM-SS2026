@@ -291,5 +291,20 @@ The cache slug auto-suffixes with `-{k}shot` (e.g.
 results coexist and can be compared in the same `Bench.compare(...)`
 DataFrame. Pass `example_pool=ExamplePool(my_conllu)` to swap in your
 own pool; `shot_seed=N` to pick a different sample from the same pool.
+
+A second bundled pool drawn from **UD_Latin-Perseus training data**
+(punctuation-stripped to match the punct-free EvaLatin format) ships alongside
+the hand-curated one:
+
+```python
+from latinbench.few_shot import DEFAULT_EXAMPLES_PATH, ExamplePool
+perseus = ExamplePool(DEFAULT_EXAMPLES_PATH.parent / "few_shot_examples_perseus.conllu")
+Bench().run(LMStudioModel("qwen3-vl-8b-instruct-mlx", k_shot=2, example_pool=perseus))
+# caches to predictions/qwen3-vl-8b-instruct-mlx-2shot-perseus/
+```
+
+The pool's `tag` (`perseus`, from the filename) is appended to the slug so it
+sits beside the hand-curated `-2shot` run instead of overwriting it.
+
 Methodology, results, and the 0-shot vs 2-shot comparison live in
-[docs/01_findings.md](docs/01_findings.md) key finding #7.
+[docs/01_findings.md](docs/01_findings.md) key findings #7 and #8.

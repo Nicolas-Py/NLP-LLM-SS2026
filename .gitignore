@@ -32,3 +32,6 @@ predictions/*/*.partial.json
 
 # LatinPipe vendored repo's own venv (we recreate per machine)
 third_party/latinpipe/.venv/
+
+# Downloaded UD treebanks (raw few-shot example source; regenerable via builder)
+data/ud_treebanks/

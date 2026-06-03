@@ -66,6 +66,8 @@ class LMStudioModel(Model):
             slug += f"-{k_shot}shot"
             if shot_seed != 0:
                 slug += f"-s{shot_seed}"
+            if self._pool is not None and self._pool.tag:
+                slug += f"-{self._pool.tag}"
         self.name = slug
 
     def predict(self, test_path: Path, out_path: Path) -> None:

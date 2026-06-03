@@ -5,7 +5,7 @@ intact so we can trace what we tried and what it cost. Detailed per-experiment
 analysis lives in [notebooks/02_compare_models.ipynb](../notebooks/02_compare_models.ipynb);
 this doc is the distilled version.
 
-_Last updated: 2026-05-27._
+_Last updated: 2026-06-03._
 
 ## Goal
 
@@ -123,6 +123,16 @@ mutate to make the sentence form a valid tree.
    for methodology (disjoint hand-curated pool, static selection,
    deterministic seed, identical prompt scaffolding across k).
 
+8. **Few-shot from training data (Perseus) — set up, run pending.** Same k=2
+   chat-history setup as #7, but the two demonstrations are drawn from real
+   UD_Latin-Perseus training sentences (punctuation-stripped to match the
+   punct-free EvaLatin format) instead of the hand-curated toy pool — to test
+   whether genuine treebank examples beat idealized ones. Pool:
+   `src/latinbench/few_shot_examples_perseus.conllu` (6 sentences). Runs cache to
+   `predictions/<model>-2shot-perseus/`, beside the hand-curated `-2shot`.
+   **Results: pending an LM Studio run** (0.6B + 8B, same as #7). Methodology in
+   the [training-data pool spec](superpowers/specs/2026-06-03-few-shot-training-data-pool-design.md).
+
 ## Engineering wins
 
 - **Minimal tree repair** (commit `9c230c9`) preserves the model's
@@ -150,7 +160,8 @@ Ordered by expected impact ÷ effort:
    finding #7). 2-shot helps the 8B on prose, flat on poetry, hurts the
    0.6B. Worth following up: scaling k (4, 8) and multi-seed variance
    for the 8B — the +2.4 LAS prose gain is the kind of effect size that
-   could vary meaningfully with example choice.
+   could vary meaningfully with example choice. Training-data (Perseus)
+   demonstrations are now implemented (finding #8); run pending.
 3. **Chu-Liu-Edmonds over candidate heads.** `ufal.chu-liu-edmonds` is
    already installed. Have the LLM score each token-pair candidacy
    instead of committing to one head, then extract the maximum-spanning
@@ -185,6 +196,10 @@ Ordered by expected impact ÷ effort:
 
 ## Changelog
 
+- **2026-06-03** — Few-shot demonstrations sourced from UD_Latin-Perseus
+  training data (punctuation-stripped) as an alternative to the hand-curated
+  pool. `ExamplePool(path=…_perseus.conllu)` + a `-2shot-perseus` cache slug so
+  it sits beside the hand-curated run. Numbers pending an LM Studio run.
 - **2026-05-27** — Few-shot (2-shot) hand-curated Latin demonstrations
   injected as chat history. 0.6B LAS hurt on both splits; 8B LAS flat
   on poetry (+0.20), +2.36 on prose. Restores 8B's prose > poetry gap.

@@ -758,3 +758,30 @@ def test_predict_with_k_shot_2_uses_few_shot_messages(tmp_path):
     assert roles == ["system", "user", "assistant", "user", "assistant", "user"]
     # Final assistant generation is still schema-constrained
     assert body["response_format"]["json_schema"]["strict"] is True
+
+
+# ---------- few-shot pool-tag slug isolation ----------
+
+def _perseus_pool():
+    from latinbench.few_shot import ExamplePool, DEFAULT_EXAMPLES_PATH
+    return ExamplePool(DEFAULT_EXAMPLES_PATH.parent / "few_shot_examples_perseus.conllu")
+
+
+def test_name_slug_perseus_pool_appends_pool_tag():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, example_pool=_perseus_pool())
+    assert m.name == "qwen3-0.6b-mlx-2shot-perseus"
+
+
+def test_name_slug_default_pool_has_no_tag_suffix():
+    """Regression: the default (hand-curated) pool keeps the bare -2shot slug so
+    existing committed predictions are not orphaned."""
+    assert LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2).name == "qwen3-0.6b-mlx-2shot"
+
+
+def test_name_slug_seed_and_pool_tag_order():
+    """Suffix order is -{k}shot -s{seed} -{pool}, matching the notebook-03 slug
+    parser."""
+    m = LMStudioModel(
+        model_id="qwen3-0.6b-mlx", k_shot=2, shot_seed=7, example_pool=_perseus_pool()
+    )
+    assert m.name == "qwen3-0.6b-mlx-2shot-s7-perseus"

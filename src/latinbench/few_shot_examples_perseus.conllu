@@ -1,0 +1,66 @@
+# sent_id = fs-perseus-001
+# source_sent_id = phi0620.phi001.perseus-lat1.tb.xml@77  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = molliter irasci non solet illa tibi
+1	molliter	mollis	ADV	_	_	2	advmod	_	_
+2	irasci	irascor	VERB	_	Aspect=Imp|Tense=Pres|VerbForm=Inf|Voice=Act	4	xcomp	_	_
+3	non	non	PART	_	_	4	advmod:neg	_	_
+4	solet	soleo	VERB	_	Aspect=Imp|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act	0	root	_	_
+5	illa	ille	DET	_	Case=Nom|Gender=Fem|Number=Sing|PronType=Dem	4	nsubj	_	_
+6	tibi	tu	PRON	_	Case=Dat|Number=Sing|Person=2|PronType=Prs	2	obl	_	_
+
+# sent_id = fs-perseus-002
+# source_sent_id = phi0620.phi001.perseus-lat1.tb.xml@206  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = quantus in exiguo tempore fugit amor
+1	quantus	quantus	DET	_	Case=Nom|Gender=Masc|Number=Sing|PronType=Rel	6	det	_	_
+2	in	in	ADP	_	_	4	case	_	_
+3	exiguo	exiguus	ADJ	_	Case=Abl|Gender=Neut|Number=Sing	4	amod	_	_
+4	tempore	tempus	NOUN	_	Case=Abl|Gender=Neut|Number=Sing	5	obl	_	_
+5	fugit	fugio	VERB	_	Aspect=Perf|Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin|Voice=Act	0	root	_	_
+6	amor	amor	NOUN	_	Case=Nom|Gender=Masc|Number=Sing	5	nsubj	_	_
+
+# sent_id = fs-perseus-003
+# source_sent_id = phi0975.phi001.perseus-lat1.tb.xml@343  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = Rem me professum dicet fors aliquis gravem
+1	Rem	res	NOUN	_	Case=Acc|Gender=Fem|Number=Sing	3	obj	_	_
+2	me	ego	PRON	_	Case=Acc|Number=Sing|Person=1|PronType=Prs	3	nsubj	_	_
+3	professum	profiteor	VERB	_	Aspect=Perf|Case=Acc|Gender=Masc|Number=Sing|VerbForm=Part|Voice=Act	4	ccomp	_	_
+4	dicet	dico	VERB	_	Aspect=Imp|Mood=Ind|Number=Sing|Person=3|Tense=Fut|VerbForm=Fin|Voice=Act	0	root	_	_
+5	fors	fors	ADV	_	_	4	advmod	_	_
+6	aliquis	aliquis	PRON	_	Case=Nom|Gender=Masc|Number=Sing|PronType=Ind	4	nsubj	_	_
+7	gravem	gravis	ADJ	_	Case=Acc|Gender=Fem|Number=Sing	1	amod	_	_
+
+# sent_id = fs-perseus-004
+# source_sent_id = tlg0031.tlg027.perseus-lat1.tb.xml@309  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = et stetit super harenam maris
+1	et	et	CCONJ	_	_	2	cc	_	_
+2	stetit	sto	VERB	_	Aspect=Perf|Mood=Ind|Number=Sing|Person=3|Tense=Past|VerbForm=Fin|Voice=Act	0	root	_	_
+3	super	super	ADP	_	_	4	case	_	_
+4	harenam	harena	NOUN	_	Case=Acc|Gender=Fem|Number=Sing	2	obl	_	_
+5	maris	mare	NOUN	_	Case=Gen|Gender=Neut|Number=Sing	4	nmod	_	_
+
+# sent_id = fs-perseus-005
+# source_sent_id = phi0631.phi001.perseus-lat1.tb.xml@122  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = viri muliebria pati mulieres pudicitiam in propatulo habere
+1	viri	vir	NOUN	_	Case=Nom|Gender=Masc|Number=Plur	3	nsubj	_	_
+2	muliebria	muliebris	ADJ	_	Case=Acc|Gender=Neut|Number=Plur	3	obj	_	_
+3	pati	patior	VERB	_	Aspect=Imp|Tense=Pres|VerbForm=Inf|Voice=Pass	0	root	_	_
+4	mulieres	mulier	NOUN	_	Case=Nom|Gender=Fem|Number=Plur	8	nsubj	_	_
+5	pudicitiam	pudicitia	NOUN	_	Case=Acc|Gender=Fem|Number=Sing	8	obj	_	_
+6	in	in	ADP	_	_	7	case	_	_
+7	propatulo	propatulum	NOUN	_	Case=Abl|Gender=Neut|Number=Sing	8	obl	_	_
+8	habere	habeo	VERB	_	Aspect=Imp|Tense=Pres|VerbForm=Inf|Voice=Act	3	conj	_	_
+
+# sent_id = fs-perseus-006
+# source_sent_id = phi0631.phi001.perseus-lat1.tb.xml@17  (UD_Latin-Perseus r2.13 train, punctuation stripped)
+# text = ita imperium semper ad optumum quemque a minus bono transfertur
+1	ita	ita	ADV	_	_	10	advmod	_	_
+2	imperium	imperium	NOUN	_	Case=Nom|Gender=Neut|Number=Sing	10	nsubj:pass	_	_
+3	semper	semper	ADV	_	AdvType=Tim	10	advmod:tmod	_	_
+4	ad	ad	ADP	_	_	6	case	_	_
+5	optumum	bonus	ADJ	_	Case=Acc|Gender=Masc|Number=Sing	6	amod	_	_
+6	quemque	quisque	DET	_	Case=Acc|Gender=Masc|Number=Sing|PronType=Ind	10	obl	_	_
+7	a	ab	ADP	_	_	9	case	_	_
+8	minus	parvus	ADV	_	_	9	nmod	_	_
+9	bono	bonus	ADJ	_	Case=Abl|Gender=Masc|Number=Sing	10	obl	_	_
+10	transfertur	transfero	VERB	_	Aspect=Imp|Mood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Pass	0	root	_	_
+
