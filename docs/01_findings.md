@@ -246,6 +246,13 @@ Ordered by expected impact ÷ effort:
   output. A hybrid (preserve labels but use right-branching heads when
   the model's head graph is broken) might give the best of both. Easy
   experiment.
+- **Chat vs packed few-shot, and format vs source.** The 8B packed-Perseus
+  2-shot (#9) trailed the multi-turn hand-curated 2-shot on the clean prose
+  split, but that pair changes both the injection format (chat→packed) and the
+  example source (hand→Perseus). The two missing corners — hand-curated *packed*
+  and Perseus *multi-turn* — would isolate which matters. And single-seed numbers
+  throughout: a multi-seed pass would tell us how much of these ~1-LAS deltas is
+  just temp-0.3 sampling noise.
 
 ## Changelog
 

@@ -306,5 +306,9 @@ Bench().run(LMStudioModel("qwen3-vl-8b-instruct-mlx", k_shot=2, example_pool=per
 The pool's `tag` (`perseus`, from the filename) is appended to the slug so it
 sits beside the hand-curated `-2shot` run instead of overwriting it.
 
-Methodology, results, and the 0-shot vs 2-shot comparison live in
-[docs/01_findings.md](docs/01_findings.md) key findings #7 and #8.
+For the single-prompt ("packed") few-shot style — all examples inlined in one
+user turn instead of multi-turn chat — pass `pack_demos=True`; the slug then
+ends in `-packed` (e.g. `…-2shot-perseus-packed`).
+
+Methodology, results, and the comparisons (0-shot vs 2-shot, chat vs packed)
+live in [docs/01_findings.md](docs/01_findings.md) key findings #7–#9.
