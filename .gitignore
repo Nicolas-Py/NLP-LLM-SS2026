@@ -10,6 +10,9 @@ venv/
 .vscode/
 .DS_Store
 
+# Claude Code local state (machine-local settings + agent worktrees)
+.claude/
+
 # Jupyter
 .ipynb_checkpoints/
 
