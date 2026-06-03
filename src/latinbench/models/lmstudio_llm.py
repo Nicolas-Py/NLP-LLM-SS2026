@@ -46,6 +46,7 @@ class LMStudioModel(Model):
         k_shot: int = 0,
         example_pool: ExamplePool | None = None,
         shot_seed: int = 0,
+        pack_demos: bool = False,
     ) -> None:
         self.model_id = model_id
         self.host = host.rstrip("/")
@@ -54,6 +55,7 @@ class LMStudioModel(Model):
         self.temperature = temperature
         self.k_shot = k_shot
         self.shot_seed = shot_seed
+        self.pack_demos = pack_demos
         self._pool = example_pool if example_pool is not None else (
             ExamplePool() if k_shot > 0 else None
         )
@@ -68,6 +70,8 @@ class LMStudioModel(Model):
                 slug += f"-s{shot_seed}"
             if self._pool is not None and self._pool.tag:
                 slug += f"-{self._pool.tag}"
+            if pack_demos:
+                slug += "-packed"
         self.name = slug
 
     def predict(self, test_path: Path, out_path: Path) -> None:
@@ -143,24 +147,36 @@ class LMStudioModel(Model):
         )
 
     def _build_messages(self, single: list) -> list[dict]:
-        """Build the chat messages list: system + k demo pairs + target user."""
-        messages: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT}
-        ]
-        for demo in self._demonstrations:
-            demo_single = [t for t in demo if isinstance(t["id"], int)]
-            messages.append({
-                "role": "user",
-                "content": _format_user_message(demo_single),
-            })
-            messages.append({
-                "role": "assistant",
-                "content": _format_assistant_response(demo_single),
-            })
-        messages.append({
-            "role": "user",
-            "content": _format_user_message(single),
-        })
+        """Build the chat messages.
+
+        Default (multi-turn): system + k (user, assistant) demonstration pairs +
+        the target user turn — examples shown as real conversation turns.
+
+        `pack_demos=True`: system + a single user turn that contains all
+        demonstrations inline (input table + expected JSON per example) followed
+        by the target — the "examples packed into one prompt, no turns" style.
+        """
+        messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        demos = [[t for t in d if isinstance(t["id"], int)] for d in self._demonstrations]
+
+        if self.pack_demos and demos:
+            parts = [
+                f"Here are {len(demos)} worked examples of the task, then the "
+                "sentence you must parse."
+            ]
+            for i, ds in enumerate(demos, 1):
+                parts.append(
+                    f"### Example {i}\n{_format_user_message(ds)}\n\n"
+                    f"Expected output:\n{_format_assistant_response(ds)}"
+                )
+            parts.append(f"### Now parse this sentence\n{_format_user_message(single)}")
+            messages.append({"role": "user", "content": "\n\n".join(parts)})
+            return messages
+
+        for ds in demos:
+            messages.append({"role": "user", "content": _format_user_message(ds)})
+            messages.append({"role": "assistant", "content": _format_assistant_response(ds)})
+        messages.append({"role": "user", "content": _format_user_message(single)})
         return messages
 
     def _call_llm(self, single: list) -> dict:

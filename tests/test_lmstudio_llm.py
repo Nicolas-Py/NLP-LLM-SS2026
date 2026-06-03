@@ -785,3 +785,34 @@ def test_name_slug_seed_and_pool_tag_order():
         model_id="qwen3-0.6b-mlx", k_shot=2, shot_seed=7, example_pool=_perseus_pool()
     )
     assert m.name == "qwen3-0.6b-mlx-2shot-s7-perseus"
+
+
+# ---------- packed (single-prompt) few-shot ----------
+
+def test_name_slug_packed_appends_packed():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, pack_demos=True)
+    assert m.name == "qwen3-0.6b-mlx-2shot-packed"
+
+
+def test_name_slug_perseus_packed():
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2,
+                      example_pool=_perseus_pool(), pack_demos=True)
+    assert m.name == "qwen3-0.6b-mlx-2shot-perseus-packed"
+
+
+def test_build_messages_packed_is_single_user_turn():
+    """pack_demos collapses the demos into one user turn: [system, user]."""
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2, pack_demos=True)
+    messages = m._build_messages(_target_single())
+    assert [x["role"] for x in messages] == ["system", "user"]
+    user = messages[1]["content"]
+    assert "### Example 1" in user and "### Example 2" in user
+    assert "### Now parse this sentence" in user
+    assert user.count('"head"') >= 2   # both demo JSON answers are inlined
+
+
+def test_build_messages_packed_off_is_still_multiturn():
+    """Default (pack_demos=False) keeps the multi-turn structure unchanged."""
+    m = LMStudioModel(model_id="qwen3-0.6b-mlx", k_shot=2)
+    roles = [x["role"] for x in m._build_messages(_target_single())]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "user"]
