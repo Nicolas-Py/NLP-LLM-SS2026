@@ -43,6 +43,23 @@ When the per-token JSON doesn't form a valid rooted tree (cycles, multi-root),
 we repair with the minimum number of head mutations rather than wiping the
 sentence — see `_repair_tree` in [src/latinbench/models/lmstudio_llm.py](../src/latinbench/models/lmstudio_llm.py).
 
+### Context-window ceiling (LM Studio config) — 2026-06-03
+
+The LLM runs are bounded by LM Studio's *loaded* context, not the model's max.
+The 8B was loaded at **4096 tokens** (it supports 256k). Each request spends
+~670 tokens of fixed overhead (system prompt + the two few-shot demos) plus the
+target's token table — which, with EvaLatin's feature-rich FEATS column, runs
+~380 tokens for a median sentence but up to ~2800 for the longest poetry lines;
+the JSON output adds up to ~1050. So the longest sentences sit right at the 4096
+ceiling. Empirically, in the cached 8B 2-shot poetry run the **two longest
+sentences (84 and 63 tokens) came back fully fallen-back** (right-branching
+`dep`) — the signature of a truncated/over-budget completion. `max_tokens=4096`
+also *equalled* the whole context, so the real output budget was always
+`4096 − prompt` (a hard prompt-overflow at k≥4). The JSON schema / 57-label enum
+does **not** consume the prompt — it compiles to a decoding grammar. **Mitigation
+(2026-06-03):** `max_tokens` lowered to 1536; raise the loaded context to 8k–16k
+and re-run variants at the new window to keep them comparable.
+
 ## Results so far
 
 All LLM runs below use the same prompt, schema, and minimal tree-repair

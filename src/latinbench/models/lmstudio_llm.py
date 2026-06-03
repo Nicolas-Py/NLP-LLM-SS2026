@@ -41,7 +41,7 @@ class LMStudioModel(Model):
         model_id: str = DEFAULT_MODEL_ID,
         host: str = DEFAULT_HOST,
         num_workers: int = 8,
-        max_tokens: int = 4096,
+        max_tokens: int = 1536,   # output cap; longest EvaLatin parse needs ~1050 tok. Kept well below the loaded context — see docs/01_findings.md "Context-window ceiling".
         temperature: float = 0.3,
         k_shot: int = 0,
         example_pool: ExamplePool | None = None,
