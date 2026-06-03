@@ -86,3 +86,13 @@ Perseus FEATS are barer than EvaLatin's (no `InflClass`/`NameType`), so the
 FEATS column of a demo differs in granularity from a target's. The prompt
 *structure* (columns, formatter, schema) is identical; this is inherent to using
 real training data and doesn't affect the k=0-vs-k=2 comparison.
+
+## Follow-up: single-prompt (packed) injection (2026-06-03)
+
+A `pack_demos=True` option on `LMStudioModel` injects the demonstrations as one
+combined user turn (each example's input table + expected JSON inline, then the
+target) instead of multi-turn user/assistant pairs — the "examples in one prompt"
+style. The slug gains a `-packed` marker (e.g. `…-2shot-perseus-packed`) so it
+caches separately. The 8B packed Perseus run helps over zero-shot but trails the
+multi-turn hand-curated 2-shot on the clean prose split (source × format
+confounded); see `docs/01_findings.md` key finding #9.
