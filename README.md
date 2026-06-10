@@ -28,14 +28,18 @@ fallback rates, per-finding analysis).
 |---|---|---:|---:|
 | poetry | LatinPipe (1× checkpoint)                       | **72.27** | **71.28** |
 | poetry | UDPipe 2 (`latin-perseus-ud-2.17`)              | 61.19 | 59.90 |
+| poetry | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot Perseus, packed) | 18.77 | 18.31 |
 | poetry | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot)    | 18.41 | 17.43 |
 | poetry | qwen3-vl-8b-instruct-mlx (LM Studio, 0-shot)    | 18.21 | 17.42 |
 | poetry | qwen3-0.6b-mlx (LM Studio, 0-shot)              |  2.67 |  2.72 |
+| poetry | qwen3-0.6b-mlx (LM Studio, 2-shot Perseus)      |  2.31 |  2.42 |
 | poetry | qwen3-0.6b-mlx (LM Studio, 2-shot)              |  2.06 |  2.23 |
 | prose  | LatinPipe (1× checkpoint)                       | **75.06** | **70.90** |
 | prose  | UDPipe 2 (`latin-perseus-ud-2.17`)              | 62.43 | 57.46 |
 | prose  | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot)    | 20.16 | 16.68 |
+| prose  | qwen3-vl-8b-instruct-mlx (LM Studio, 2-shot Perseus, packed) | 18.98 | 16.26 |
 | prose  | qwen3-vl-8b-instruct-mlx (LM Studio, 0-shot)    | 17.80 | 14.53 |
+| prose  | qwen3-0.6b-mlx (LM Studio, 2-shot Perseus)      |  1.99 |  2.08 |
 | prose  | qwen3-0.6b-mlx (LM Studio, 0-shot)              |  1.62 |  1.51 |
 | prose  | qwen3-0.6b-mlx (LM Studio, 2-shot)              |  1.32 |  1.52 |
 

@@ -5,7 +5,7 @@ intact so we can trace what we tried and what it cost. Detailed per-experiment
 analysis lives in [notebooks/02_compare_models.ipynb](../notebooks/02_compare_models.ipynb);
 this doc is the distilled version.
 
-_Last updated: 2026-06-03._
+_Last updated: 2026-06-10._
 
 ## Goal
 
@@ -211,10 +211,14 @@ Ordered by expected impact ÷ effort:
    whether the 8B result is Qwen-specific or a general scale effect.
 2. ~~**Few-shot Latin parses in the prompt.**~~ Done 2026-05-27 (key
    finding #7). 2-shot helps the 8B on prose, flat on poetry, hurts the
-   0.6B. Worth following up: scaling k (4, 8) and multi-seed variance
-   for the 8B — the +2.4 LAS prose gain is the kind of effect size that
-   could vary meaningfully with example choice. Training-data (Perseus)
-   demonstrations are now implemented (finding #8); run pending.
+   0.6B. ~~Training-data (Perseus) demonstrations~~ done 2026-06-03
+   (findings #8–#9): Perseus pool beats hand-curated on the 0.6B and cuts
+   its fallback by ~2/3; on the 8B, packed Perseus beats 0-shot but trails
+   multi-turn hand-curated on prose. Remaining follow-ups: the two missing
+   corners (hand-curated *packed*, Perseus *multi-turn*) to deconfound
+   source vs format, scaling k (4, 8), and multi-seed variance — the
+   ~1–2 LAS deltas are the kind of effect size that could be temp-0.3
+   sampling noise.
 3. **Chu-Liu-Edmonds over candidate heads.** `ufal.chu-liu-edmonds` is
    already installed. Have the LLM score each token-pair candidacy
    instead of committing to one head, then extract the maximum-spanning
