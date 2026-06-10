@@ -5,7 +5,7 @@ intact so we can trace what we tried and what it cost. Detailed per-experiment
 analysis lives in [notebooks/02_compare_models.ipynb](../notebooks/02_compare_models.ipynb);
 this doc is the distilled version.
 
-_Last updated: 2026-05-27._
+_Last updated: 2026-06-10._
 
 ## Goal
 
@@ -43,6 +43,23 @@ When the per-token JSON doesn't form a valid rooted tree (cycles, multi-root),
 we repair with the minimum number of head mutations rather than wiping the
 sentence — see `_repair_tree` in [src/latinbench/models/lmstudio_llm.py](../src/latinbench/models/lmstudio_llm.py).
 
+### Context-window ceiling (LM Studio config) — 2026-06-03
+
+The LLM runs are bounded by LM Studio's *loaded* context, not the model's max.
+The 8B was loaded at **4096 tokens** (it supports 256k). Each request spends
+~670 tokens of fixed overhead (system prompt + the two few-shot demos) plus the
+target's token table — which, with EvaLatin's feature-rich FEATS column, runs
+~380 tokens for a median sentence but up to ~2800 for the longest poetry lines;
+the JSON output adds up to ~1050. So the longest sentences sit right at the 4096
+ceiling. Empirically, in the cached 8B 2-shot poetry run the **two longest
+sentences (84 and 63 tokens) came back fully fallen-back** (right-branching
+`dep`) — the signature of a truncated/over-budget completion. `max_tokens=4096`
+also *equalled* the whole context, so the real output budget was always
+`4096 − prompt` (a hard prompt-overflow at k≥4). The JSON schema / 57-label enum
+does **not** consume the prompt — it compiles to a decoding grammar. **Mitigation
+(2026-06-03):** `max_tokens` lowered to 1536; raise the loaded context to 8k–16k
+and re-run variants at the new window to keep them comparable.
+
 ## Results so far
 
 All LLM runs below use the same prompt, schema, and minimal tree-repair
@@ -55,14 +72,18 @@ mutate to make the sentence form a valid tree.
 | poetry | UDPipe 2 | 69.0 | 61.2 | 59.9 | — |
 | poetry | qwen3-vl-8b-instruct-mlx          | 35.4 | **18.2** | 17.4 | 4.2% tok, 29% of sents |
 | poetry | qwen3-vl-8b-instruct-mlx (2-shot) | 35.9 | 18.4 | 17.4 | 9.5% tok, 32% of sents |
+| poetry | qwen3-vl-8b-instruct-mlx (2-shot Perseus, packed) | 36.9 | 18.8 | 18.3 | 6.5% tok, 29% of sents |
 | poetry | qwen3-0.6b-mlx                    |  9.6 | 2.7 | 2.7 | 42.3% tok, 44% of sents |
 | poetry | qwen3-0.6b-mlx (2-shot)           | 19.5 | 2.1 | 2.2 | 57.9% tok, 74% of sents |
+| poetry | qwen3-0.6b-mlx (2-shot Perseus)   | 11.6 | 2.3 | 2.4 | 23.2% tok, 72% of sents |
 | prose  | LatinPipe | 80.4 | **75.1** | 70.9 | — |
 | prose  | UDPipe 2 | 69.3 | 62.4 | 57.5 | — |
 | prose  | qwen3-vl-8b-instruct-mlx          | 33.3 | 17.8 | 14.5 | 3.4% tok, 41% of sents |
 | prose  | qwen3-vl-8b-instruct-mlx (2-shot) | 36.5 | **20.2** | 16.7 | 3.8% tok, 38% of sents |
+| prose  | qwen3-vl-8b-instruct-mlx (2-shot Perseus, packed) | 33.7 | 19.0 | 16.3 | 4.0% tok, 40% of sents |
 | prose  | qwen3-0.6b-mlx                    |  7.6 | 1.6 | 1.5 | 40.1% tok, 53% of sents |
 | prose  | qwen3-0.6b-mlx (2-shot)           | 23.5 | 1.3 | 1.5 | 59.7% tok, 86% of sents |
+| prose  | qwen3-0.6b-mlx (2-shot Perseus)   | 12.8 | 2.0 | 2.1 | 20.8% tok, 63% of sents |
 
 ## Key findings
 
@@ -123,6 +144,48 @@ mutate to make the sentence form a valid tree.
    for methodology (disjoint hand-curated pool, static selection,
    deterministic seed, identical prompt scaffolding across k).
 
+8. **Few-shot from training data (Perseus) beats the hand-curated pool on the
+   0.6B; 8B in #9.** Same k=2 setup as #7, but the two demonstrations are
+   real UD_Latin-Perseus training sentences (punctuation-stripped) instead of
+   hand-curated toy ones (run 2026-06-03; see the 0.6B `(2-shot Perseus)` rows in
+   the results table above). Perseus beats hand-curated on LAS and CLAS on both
+   splits (poetry LAS 2.31 vs 2.06, prose 1.99 vs 1.32), and unlike the
+   hand-curated pool it **helps prose** over zero-shot (1.99 vs 1.62). Its bigger
+   win is tree validity: token-fallback drops to 23.2% / 20.8% (poetry/prose) vs
+   the hand-curated pool's 57.9% / 59.7% — real treebank demos make even the weak
+   model emit far more valid trees. (UAS is correspondingly lower, 11.6 / 12.8 vs
+   19.5 / 23.5 — the fallback-driven UAS/LAS tradeoff of #4.) Absolute LAS is
+   still ~2; the **8B — the model that actually benefits from few-shot (#7) — is
+   covered in #9 below**. Pool:
+   `src/latinbench/few_shot_examples_perseus.conllu` (6 sentences); cache
+   `predictions/<model>-2shot-perseus/`. Methodology in the
+   [training-data pool spec](superpowers/specs/2026-06-03-few-shot-training-data-pool-design.md).
+
+9. **8B packed (single-prompt) few-shot from Perseus: helps over zero-shot, but
+   multi-turn hand-curated stays ahead on the clean split.** Run 2026-06-03 with
+   the two demonstrations packed into a single user turn (no chat turns;
+   `pack_demos=True`), Perseus pool, at a raised 16k context. 8B numbers:
+
+   | 8B variant | poetry LAS | prose LAS | poetry CLAS | prose CLAS |
+   |---|---:|---:|---:|---:|
+   | 0-shot                  | 18.21 | 17.80 | 17.42 | 14.53 |
+   | 2-shot hand (chat)      | 18.41 | **20.16** | 17.43 | **16.68** |
+   | 2-shot Perseus (packed) | **18.77** | 18.98 | **18.31** | 16.26 |
+
+   Read it on **prose** — the clean split (its sentences fit under 4096, so the
+   baselines and this 16k run are on equal footing; poetry instead gains ~+0.3
+   LAS purely from no longer truncating its 2 longest lines, see "Context-window
+   ceiling"). On prose, packed Perseus beats 0-shot (+1.18 LAS, +1.73 CLAS) —
+   **single-prompt few-shot does help the 8B** — but the multi-turn hand-curated
+   2-shot (20.16) remains best (+1.18 over packed). That hand-vs-Perseus /
+   chat-vs-packed gap changes **two variables at once** (example source *and*
+   injection format), so it can't be attributed; the missing corners
+   (hand-packed, Perseus-chat) would isolate it. Fallback stayed healthy (poetry
+   6.5%, prose 4.0%) — the packed format doesn't confuse the model. **Caveats:**
+   single seed, temp 0.3 (≈1-LAS gaps may be noise); poetry confounded by the
+   context change. Code: `LMStudioModel(pack_demos=True)`; cache
+   `predictions/qwen3-vl-8b-instruct-mlx-2shot-perseus-packed/`.
+
 ## Engineering wins
 
 - **Minimal tree repair** (commit `9c230c9`) preserves the model's
@@ -148,9 +211,14 @@ Ordered by expected impact ÷ effort:
    whether the 8B result is Qwen-specific or a general scale effect.
 2. ~~**Few-shot Latin parses in the prompt.**~~ Done 2026-05-27 (key
    finding #7). 2-shot helps the 8B on prose, flat on poetry, hurts the
-   0.6B. Worth following up: scaling k (4, 8) and multi-seed variance
-   for the 8B — the +2.4 LAS prose gain is the kind of effect size that
-   could vary meaningfully with example choice.
+   0.6B. ~~Training-data (Perseus) demonstrations~~ done 2026-06-03
+   (findings #8–#9): Perseus pool beats hand-curated on the 0.6B and cuts
+   its fallback by ~2/3; on the 8B, packed Perseus beats 0-shot but trails
+   multi-turn hand-curated on prose. Remaining follow-ups: the two missing
+   corners (hand-curated *packed*, Perseus *multi-turn*) to deconfound
+   source vs format, scaling k (4, 8), and multi-seed variance — the
+   ~1–2 LAS deltas are the kind of effect size that could be temp-0.3
+   sampling noise.
 3. **Chu-Liu-Edmonds over candidate heads.** `ufal.chu-liu-edmonds` is
    already installed. Have the LLM score each token-pair candidacy
    instead of committing to one head, then extract the maximum-spanning
@@ -182,9 +250,26 @@ Ordered by expected impact ÷ effort:
   output. A hybrid (preserve labels but use right-branching heads when
   the model's head graph is broken) might give the best of both. Easy
   experiment.
+- **Chat vs packed few-shot, and format vs source.** The 8B packed-Perseus
+  2-shot (#9) trailed the multi-turn hand-curated 2-shot on the clean prose
+  split, but that pair changes both the injection format (chat→packed) and the
+  example source (hand→Perseus). The two missing corners — hand-curated *packed*
+  and Perseus *multi-turn* — would isolate which matters. And single-seed numbers
+  throughout: a multi-seed pass would tell us how much of these ~1-LAS deltas is
+  just temp-0.3 sampling noise.
 
 ## Changelog
 
+- **2026-06-03** — 8B Perseus few-shot with the demonstrations packed into a
+  single user turn (`pack_demos=True`, single-prompt) at 16k context. On the
+  clean prose split it beats 0-shot (+1.18 LAS) but trails the multi-turn
+  hand-curated 2-shot (18.98 vs 20.16); source×format confounded. Finding #9.
+- **2026-06-03** — Few-shot demonstrations sourced from UD_Latin-Perseus
+  training data (punctuation-stripped) as an alternative to the hand-curated
+  pool. `ExamplePool(path=…_perseus.conllu)` + a `-2shot-perseus` cache slug so
+  it sits beside the hand-curated run. 0.6B run: Perseus beats hand-curated on
+  LAS/CLAS both splits and cuts token-fallback to ~21–23% (hand-curated ~58–60%);
+  8B run still pending (not loaded). See key finding #8.
 - **2026-05-27** — Few-shot (2-shot) hand-curated Latin demonstrations
   injected as chat history. 0.6B LAS hurt on both splits; 8B LAS flat
   on poetry (+0.20), +2.36 on prose. Restores 8B's prose > poetry gap.

@@ -17,15 +17,38 @@ import conllu
 DEFAULT_EXAMPLES_PATH = Path(__file__).parent / "few_shot_examples.conllu"
 
 
+def _derive_tag(path: Path) -> str:
+    """Short pool identifier used to keep prediction-cache slugs distinct per
+    example source.
+
+    The default pool gets the empty tag (so slugs stay `…-{k}shot`, leaving
+    existing caches untouched); a `few_shot_examples_<x>.conllu` file → `<x>`
+    (e.g. `…_perseus.conllu` → `"perseus"`); any other file → its stem.
+    """
+    stem = path.stem
+    default_stem = DEFAULT_EXAMPLES_PATH.stem  # "few_shot_examples"
+    if stem == default_stem:
+        return ""
+    prefix = default_stem + "_"
+    if stem.startswith(prefix):
+        return stem[len(prefix):]
+    return stem
+
+
 class ExamplePool:
     """A bag of demonstration sentences, sampled deterministically.
 
     Sentences are parsed once at construction. `sample(k, seed)` is pure
     in `(k, seed)` — same args, same returned sentences, no shared state.
+
+    `tag` is a short identifier for the example source (derived from the
+    filename unless passed explicitly); `LMStudioModel` appends it to its
+    prediction-cache slug so runs off different pools never clobber each other.
     """
 
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(self, path: Path | None = None, tag: str | None = None) -> None:
         self.path = Path(path) if path else DEFAULT_EXAMPLES_PATH
+        self.tag = tag if tag is not None else _derive_tag(self.path)
         self._sentences = conllu.parse(self.path.read_text())
         if not self._sentences:
             raise ValueError(f"Empty example pool: {self.path}")
