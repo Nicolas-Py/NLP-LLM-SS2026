@@ -27,6 +27,9 @@ checkpoints/
 predictions/my_model/
 predictions/*/*.partial.json
 
+# Secrets — API keys live here, never in git
+.env
+
 # Personal notes / specs (never committed)
 .specs/
 

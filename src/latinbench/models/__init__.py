@@ -8,6 +8,7 @@ from __future__ import annotations
 from ..core import Model
 from .latinpipe import LatinpipeModel
 from .lmstudio_llm import LMStudioModel
+from .openrouter_llm import OpenRouterModel
 from .udpipe import UdpipeModel
 
 
@@ -26,6 +27,9 @@ def _make_registry() -> dict[str, Model]:
         "qwen3-lmstudio": LMStudioModel(),  # 0.6B baseline
         "qwen3-vl-8b-lmstudio": LMStudioModel(model_id="qwen3-vl-8b-instruct-mlx"),
         "gemma-3-12b-lmstudio": LMStudioModel(model_id="google/gemma-3-12b"),
+        # Hosted via OpenRouter (needs OPENROUTER_API_KEY at run time; the key
+        # is resolved lazily so building this registry never requires it).
+        "gemini-3-flash-openrouter": OpenRouterModel(),
     }
 
 

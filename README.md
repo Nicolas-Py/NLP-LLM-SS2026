@@ -316,3 +316,33 @@ ends in `-packed` (e.g. `…-2shot-perseus-packed`).
 
 Methodology, results, and the comparisons (0-shot vs 2-shot, chat vs packed)
 live in [docs/01_findings.md](docs/01_findings.md) key findings #7–#9.
+
+#### Hosted LLMs via OpenRouter
+
+`OpenRouterModel` is a thin subclass of `LMStudioModel` that talks to
+[OpenRouter](https://openrouter.ai)'s OpenAI-compatible endpoint instead of a
+local server — same prompts, schema, few-shot options, fallback and tree repair.
+It defaults to `google/gemini-3-flash-preview` ($0.50/M input — within budget,
+structured output supported) and adds retry/backoff on rate-limit/transient
+errors.
+
+The API key is read from `OPENROUTER_API_KEY` (or a gitignored `.env` at the
+repo root — `OPENROUTER_API_KEY=sk-or-...`). **Never commit the key.** It is
+resolved lazily, so building `MODELS` without a key is fine; `predict()` fails
+loudly if it's still missing.
+
+```python
+from latinbench import Bench, MODELS
+Bench().run(MODELS["gemini-3-flash-openrouter"])          # default model
+# or construct directly with any OpenRouter model id / few-shot options:
+from latinbench.models.openrouter_llm import OpenRouterModel
+Bench().run(OpenRouterModel("google/gemini-2.5-flash", k_shot=2))
+```
+
+Or use the runner script — full bench, or a cheap `--limit N` smoke test that
+scores the first N sentences without touching the committed `predictions/` tree:
+
+```bash
+.venv/bin/python scripts/run_openrouter.py                      # full poetry+prose
+.venv/bin/python scripts/run_openrouter.py --split prose --limit 3   # smoke test
+```
